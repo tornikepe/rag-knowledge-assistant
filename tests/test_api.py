@@ -69,6 +69,29 @@ def test_unsupported_file_type_is_rejected(client):
     assert r.status_code == 415
 
 
+def test_reingesting_same_file_replaces_not_duplicates(client):
+    first = client.post("/api/ingest", files={"file": ("energy.md", SAMPLE, "text/markdown")}).json()
+    second = client.post("/api/ingest", files={"file": ("energy.md", SAMPLE, "text/markdown")}).json()
+    # Same content, same filename -> chunk count stays put (no duplicates).
+    assert first["chunks_added"] == second["chunks_added"]
+    assert second["total_chunks"] == second["chunks_added"]
+    docs = client.get("/api/documents").json()
+    assert len([d for d in docs["documents"] if d["source"] == "energy.md"]) == 1
+
+
+def test_delete_single_document(client):
+    client.post("/api/ingest", files={"file": ("energy.md", SAMPLE, "text/markdown")})
+    client.post("/api/ingest", files={"file": ("other.md", b"# Other\n\nUnrelated text.", "text/markdown")})
+
+    r = client.delete("/api/documents/energy.md")
+    assert r.status_code == 200
+    sources = [d["source"] for d in client.get("/api/documents").json()["documents"]]
+    assert sources == ["other.md"]
+
+    # Deleting a document that isn't indexed is a 404.
+    assert client.delete("/api/documents/nope.md").status_code == 404
+
+
 def test_clear_documents(client):
     client.post("/api/ingest", files={"file": ("energy.md", SAMPLE, "text/markdown")})
     assert client.delete("/api/documents").status_code == 200

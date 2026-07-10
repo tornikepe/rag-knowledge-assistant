@@ -48,6 +48,10 @@ class VectorStore(ABC):
         """Map of source filename -> number of chunks."""
 
     @abstractmethod
+    def remove_document(self, source: str) -> int:
+        """Remove every chunk belonging to ``source``. Returns how many were removed."""
+
+    @abstractmethod
     def clear(self) -> None: ...
 
 
@@ -122,6 +126,18 @@ class NumpyVectorStore(VectorStore):
         for record in self._records:
             counts[record.source] = counts.get(record.source, 0) + 1
         return counts
+
+    def remove_document(self, source: str) -> int:
+        if not self._records:
+            return 0
+        keep = [i for i, r in enumerate(self._records) if r.source != source]
+        removed = len(self._records) - len(keep)
+        if removed == 0:
+            return 0
+        self._records = [self._records[i] for i in keep]
+        self._matrix = self._matrix[keep] if (keep and self._matrix is not None) else None
+        self._persist()
+        return removed
 
     def clear(self) -> None:
         self._records = []

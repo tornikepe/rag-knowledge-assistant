@@ -102,6 +102,18 @@ def documents(request: Request) -> DocumentsResponse:
     )
 
 
+@router.delete("/documents/{source:path}", tags=["documents"])
+def delete_document(request: Request, source: str) -> dict[str, object]:
+    service = _service(request)
+    removed = service.store.remove_document(source)
+    if removed == 0:
+        raise HTTPException(404, f"No indexed document named {source!r}")
+    return {
+        "message": f"Removed {removed} chunk(s) from {source}",
+        "total_chunks": service.store.count(),
+    }
+
+
 @router.delete("/documents", tags=["documents"])
 def clear_documents(request: Request) -> dict[str, str]:
     _service(request).store.clear()

@@ -54,3 +54,21 @@ def test_clear_empties_the_index(tmp_path):
 def test_search_on_empty_store_returns_empty(tmp_path):
     store = NumpyVectorStore(tmp_path / "index")
     assert store.search(np.zeros(8, dtype=np.float32), k=5) == []
+
+
+def test_remove_document_deletes_only_that_source(tmp_path):
+    embedder = HashingEmbeddings(dim=64)
+    store = NumpyVectorStore(tmp_path / "index")
+
+    a = [Record(id=f"a{i}", text=t, source="a.md", chunk_index=i) for i, t in enumerate(["one", "two"])]
+    b = [Record(id="b0", text="three", source="b.md", chunk_index=0)]
+    store.add(a, embedder.embed_documents(["one", "two"]))
+    store.add(b, embedder.embed_documents(["three"]))
+    assert store.count() == 3
+
+    removed = store.remove_document("a.md")
+    assert removed == 2
+    assert store.documents() == {"b.md": 1}
+    # Search still works on the remaining document.
+    results = store.search(embedder.embed_query("three"), k=3)
+    assert results and results[0].record.source == "b.md"

@@ -10,6 +10,7 @@ citation-bearing answer. Two providers implement one interface:
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
@@ -45,15 +46,11 @@ class EchoLLM(LLMProvider):
     def stream(self, system: str, user: str) -> Iterator[str]:
         # The user prompt embeds the numbered context; surface passage [1] as the
         # grounded answer so the end-to-end flow (and citations) is demonstrable offline.
-        question = _extract_between(user, "Question:", "\n")
         passage = _first_context_passage(user)
         if passage:
-            yield (
-                f"Based on the retrieved context, here is what the documents say"
-                f"{(' about ' + question.strip()) if question else ''}:\n\n"
-            )
+            yield "**Based on the retrieved context:**\n\n"
             yield f"{passage} [1]\n\n"
-            yield "(Offline demo answer — set LLM_PROVIDER=anthropic for Claude-generated responses.)"
+            yield "_Offline demo answer — set `LLM_PROVIDER=anthropic` to get Claude-generated responses._"
         else:
             yield "I couldn't find anything relevant in the indexed documents."
 
@@ -96,18 +93,14 @@ def build_llm_provider(settings: Settings) -> LLMProvider:
 
 
 # --- helpers for the offline EchoLLM ---------------------------------------
-def _extract_between(text: str, start: str, end: str) -> str:
-    if start not in text:
-        return ""
-    tail = text.split(start, 1)[1]
-    return tail.split(end, 1)[0] if end in tail else tail
-
-
 def _first_context_passage(user: str) -> str:
+    """Pull the text of the top-ranked passage out of the numbered prompt."""
     if "[1]" not in user:
         return ""
     after = user.split("[1]", 1)[1]
     for terminator in ("\n[2]", "\n\nQuestion:", "\nQuestion:"):
         if terminator in after:
             after = after.split(terminator, 1)[0]
+    # Drop the "(source: filename)" line the prompt prepends to each passage.
+    after = re.sub(r"^\s*\(source:[^)]*\)\s*", "", after)
     return after.strip().strip(":").strip()

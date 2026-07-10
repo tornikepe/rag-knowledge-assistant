@@ -57,6 +57,8 @@ class RAGService:
             )
             for i, chunk in enumerate(chunks)
         ]
+        # Re-ingesting the same filename replaces its previous chunks (no duplicates).
+        self.store.remove_document(filename)
         self.store.add(records, vectors)
         return len(records)
 
