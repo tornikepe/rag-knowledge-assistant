@@ -1,0 +1,19 @@
+[project]
+name = "rag-knowledge-assistant"
+version = "1.0.0"
+description = "Retrieval-Augmented Generation API with citations, built with FastAPI and Claude."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

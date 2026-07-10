@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Knowledge Assistant</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">📚</span>
+          <div>
+            <h1>RAG Assistant</h1>
+            <p class="tagline">Ask your documents anything</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <h2>Add knowledge</h2>
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="file-input" accept=".pdf,.txt,.md,.markdown" hidden />
+            <span class="dropzone-icon">⬆️</span>
+            <span class="dropzone-text">Drop a PDF / TXT / MD here<br />or click to browse</span>
+          </label>
+          <div class="upload-status" id="upload-status"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Indexed documents</h2>
+            <button class="link-btn" id="clear-btn" title="Clear the index">Clear</button>
+          </div>
+          <ul class="doc-list" id="doc-list">
+            <li class="doc-empty">No documents yet.</li>
+          </ul>
+        </section>
+
+        <footer class="sidebar-foot">
+          <div class="status-row">
+            <span class="dot" id="status-dot"></span>
+            <span id="status-text">connecting…</span>
+          </div>
+        </footer>
+      </aside>
+
+      <main class="chat">
+        <header class="chat-head">
+          <div>
+            <h2>Conversation</h2>
+            <p class="muted" id="mode-line">—</p>
+          </div>
+          <a
+            class="ghost-btn"
+            href="/docs"
+            target="_blank"
+            rel="noopener"
+            title="Interactive OpenAPI docs"
+            >API docs ↗</a
+          >
+        </header>
+
+        <div class="messages" id="messages">
+          <div class="empty-state">
+            <div class="empty-emoji">💬</div>
+            <h3>Grounded answers, with sources.</h3>
+            <p>
+              Upload a document, then ask a question. Every answer is generated
+              <strong>only</strong> from the retrieved passages and cites them inline.
+            </p>
+            <div class="suggestions" id="suggestions"></div>
+          </div>
+        </div>
+
+        <form class="composer" id="composer">
+          <textarea
+            id="question"
+            rows="1"
+            placeholder="Ask a question about your documents…"
+            autocomplete="off"
+          ></textarea>
+          <button type="submit" id="send-btn" title="Send">➤</button>
+        </form>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

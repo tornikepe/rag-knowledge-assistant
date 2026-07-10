@@ -1,0 +1,18 @@
+services:
+  rag:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Defaults run offline. Uncomment + set keys for real models:
+      # EMBEDDING_PROVIDER: openai
+      # OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # LLM_PROVIDER: anthropic
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      EMBEDDING_PROVIDER: hash
+      LLM_PROVIDER: echo
+    volumes:
+      - rag_storage:/app/storage
+
+volumes:
+  rag_storage:
