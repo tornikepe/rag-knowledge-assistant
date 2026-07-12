@@ -106,56 +106,7 @@ window.addEventListener("hashchange", router);
 //  LANDING
 // ============================================================
 function initLanding() {
-  if (state.landingInit) return;
-  state.landingInit = true;
-
-  // reveal on scroll
-  const io = new IntersectionObserver(
-    (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }),
-    { threshold: 0.12 }
-  );
-  $$(".reveal").forEach((el) => io.observe(el));
-
-  // nav background on scroll
-  const nav = $("#nav");
-  const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 12);
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
-
-  // animated hero mock conversation
-  playMock();
-}
-
-function playMock() {
-  const body = $("#mock-body");
-  if (!body) return;
-  body.innerHTML = "";
-  const steps = [
-    { d: 400, html: `<div class="mock-msg user">What does the contract say about termination?</div>` },
-    { d: 900, html: `<div class="mock-msg bot"><span class="mock-typing"><i></i><i></i><i></i></span></div>`, typing: true },
-    {
-      d: 1600,
-      html: `<div class="mock-msg bot">Either party may terminate with <strong>30 days'</strong> written notice.<span class="mock-cite">1</span> Fees already paid are non-refundable.<span class="mock-cite">2</span></div>`,
-    },
-  ];
-  let acc = 0;
-  steps.forEach((s) => {
-    acc += s.d;
-    setTimeout(() => {
-      if (s.typing) {
-        body.insertAdjacentHTML("beforeend", s.html);
-      } else if (steps.indexOf(s) === 2) {
-        // replace typing bubble with the answer
-        const bots = body.querySelectorAll(".mock-msg.bot");
-        const last = bots[bots.length - 1];
-        if (last) last.outerHTML = s.html; else body.insertAdjacentHTML("beforeend", s.html);
-      } else {
-        body.insertAdjacentHTML("beforeend", s.html);
-      }
-    }, acc);
-  });
-  // loop
-  setTimeout(playMock, acc + 4200);
+  // The minimal landing animates purely in CSS (the aurora background) — nothing to init.
 }
 
 // ============================================================
