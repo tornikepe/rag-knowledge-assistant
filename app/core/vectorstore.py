@@ -10,6 +10,7 @@ the app.
 from __future__ import annotations
 
 import json
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -62,6 +63,7 @@ class NumpyVectorStore(VectorStore):
         self.index_dir = Path(index_dir)
         self._records: list[Record] = []
         self._matrix: np.ndarray | None = None  # shape (N, dim), rows L2-normalized
+        self._lock = threading.Lock()  # guards concurrent writes/reads across threads
         self._load()
 
     # --- persistence ---------------------------------------------------------
@@ -95,28 +97,31 @@ class NumpyVectorStore(VectorStore):
         if len(records) != embeddings.shape[0]:
             raise ValueError("records and embeddings length mismatch")
         embeddings = embeddings.astype(np.float32)
-        if self._matrix is None or self._matrix.size == 0:
-            self._matrix = embeddings
-        else:
-            if embeddings.shape[1] != self._matrix.shape[1]:
-                raise ValueError(
-                    "Embedding dimension changed — clear the index before switching "
-                    "embedding providers."
-                )
-            self._matrix = np.vstack([self._matrix, embeddings])
-        self._records.extend(records)
-        self._persist()
+        with self._lock:
+            if self._matrix is None or self._matrix.size == 0:
+                self._matrix = embeddings
+            else:
+                if embeddings.shape[1] != self._matrix.shape[1]:
+                    raise ValueError(
+                        "Embedding dimension changed — clear the index before switching "
+                        "embedding providers."
+                    )
+                self._matrix = np.vstack([self._matrix, embeddings])
+            self._records.extend(records)
+            self._persist()
 
     def search(self, query_embedding: np.ndarray, k: int) -> list[SearchResult]:
-        if self._matrix is None or self._matrix.size == 0:
-            return []
-        query = query_embedding.astype(np.float32).reshape(-1)
-        # Rows and query are unit-normalized, so the dot product is cosine similarity.
-        scores = self._matrix @ query
-        k = min(k, len(self._records))
-        top = np.argpartition(-scores, k - 1)[:k]
-        top = top[np.argsort(-scores[top])]
-        return [SearchResult(self._records[i], float(scores[i])) for i in top]
+        with self._lock:
+            if self._matrix is None or self._matrix.size == 0:
+                return []
+            matrix, records = self._matrix, self._records
+            query = query_embedding.astype(np.float32).reshape(-1)
+            # Rows and query are unit-normalized, so the dot product is cosine similarity.
+            scores = matrix @ query
+            k = min(k, len(records))
+            top = np.argpartition(-scores, k - 1)[:k]
+            top = top[np.argsort(-scores[top])]
+            return [SearchResult(records[i], float(scores[i])) for i in top]
 
     def count(self) -> int:
         return len(self._records)
@@ -128,19 +133,21 @@ class NumpyVectorStore(VectorStore):
         return counts
 
     def remove_document(self, source: str) -> int:
-        if not self._records:
-            return 0
-        keep = [i for i, r in enumerate(self._records) if r.source != source]
-        removed = len(self._records) - len(keep)
-        if removed == 0:
-            return 0
-        self._records = [self._records[i] for i in keep]
-        self._matrix = self._matrix[keep] if (keep and self._matrix is not None) else None
-        self._persist()
-        return removed
+        with self._lock:
+            if not self._records:
+                return 0
+            keep = [i for i, r in enumerate(self._records) if r.source != source]
+            removed = len(self._records) - len(keep)
+            if removed == 0:
+                return 0
+            self._records = [self._records[i] for i in keep]
+            self._matrix = self._matrix[keep] if (keep and self._matrix is not None) else None
+            self._persist()
+            return removed
 
     def clear(self) -> None:
-        self._records = []
-        self._matrix = None
-        for path in (self._vectors_path, self._records_path):
-            path.unlink(missing_ok=True)
+        with self._lock:
+            self._records = []
+            self._matrix = None
+            for path in (self._vectors_path, self._records_path):
+                path.unlink(missing_ok=True)

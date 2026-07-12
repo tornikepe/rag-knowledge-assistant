@@ -8,6 +8,9 @@ A production-shaped Retrieval-Augmented Generation (RAG) service: upload PDFs, t
 Markdown, and query them in natural language. Every answer is generated **only** from the
 retrieved passages and cites its sources inline.
 
+**▶ [Live demo](https://rag-knowledge-assistant.vercel.app)** · deployed on Vercel
+
+[![Live Demo](https://img.shields.io/badge/live_demo-online-3fb950)](https://rag-knowledge-assistant.vercel.app)
 [![CI](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)
@@ -92,6 +95,18 @@ Open **http://localhost:8000**, upload a document, and start asking questions.
 ```bash
 docker compose up --build             # → http://localhost:8000
 ```
+
+### Option C — Deploy to Vercel (one click)
+
+The repo ships a `vercel.json` + serverless entry point (`api/index.py`). Import the
+repo on Vercel and it deploys as-is — the live demo runs in offline mode (no keys) and
+auto-seeds the sample document so it's queryable immediately.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/tornikepe/rag-knowledge-assistant)
+
+> On serverless the vector index lives in `/tmp` (ephemeral), so uploads persist only
+> within a warm instance — perfect for a demo. For durable storage, run it as a container
+> or swap in a hosted vector DB behind the `VectorStore` interface.
 
 ### Enable real models (recommended)
 

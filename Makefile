@@ -1,7 +1,10 @@
-.PHONY: install dev run test seed clean docker
+.PHONY: install install-dev run test seed clean docker help
 
-install:       ## Install dependencies
+install:       ## Install runtime dependencies
 	pip install -r requirements.txt
+
+install-dev:   ## Install runtime + test dependencies
+	pip install -r requirements-dev.txt
 
 run:           ## Start the API + UI at http://localhost:8000
 	uvicorn app.main:app --reload --port 8000

@@ -261,12 +261,32 @@ body {
   font-size: 12px;
   margin: 3px 0 0;
 }
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.icon-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 37px;
+  height: 37px;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.icon-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .ghost-btn {
   font-size: 13px;
   color: var(--text);
   text-decoration: none;
   border: 1px solid var(--border);
-  padding: 7px 13px;
+  padding: 8px 13px;
   border-radius: var(--radius-sm);
   transition: border-color 0.15s, background 0.15s;
 }
@@ -343,6 +363,7 @@ body {
   border: 1px solid var(--border);
 }
 .bubble {
+  position: relative;
   background: var(--assistant-bubble);
   border: 1px solid var(--border);
   padding: 15px 17px;
@@ -351,6 +372,33 @@ body {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   box-shadow: var(--shadow);
+}
+.msg.assistant .bubble {
+  padding-right: 38px;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.msg.assistant:hover .copy-btn {
+  opacity: 1;
+}
+.copy-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .msg.user .bubble {
   background: var(--user-bubble);

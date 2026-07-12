@@ -8,10 +8,16 @@ to real models by setting the provider + key envs. See ``.env.example``.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Vercel's filesystem is read-only except for /tmp, and serverless instances are
+# ephemeral. On Vercel we therefore write the index to /tmp and seed the bundled
+# sample document at startup so the live demo is queryable out of the box.
+_ON_VERCEL = bool(os.getenv("VERCEL"))
 
 
 class Settings(BaseSettings):
@@ -27,7 +33,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]
 
     # --- Storage (the vector index is persisted here) ---
-    storage_dir: Path = Path("storage")
+    storage_dir: Path = Path("/tmp/storage") if _ON_VERCEL else Path("storage")
+
+    # Seed the bundled sample document(s) at startup when the index is empty.
+    seed_sample_docs: bool = _ON_VERCEL
 
     # --- Chunking / retrieval ---
     chunk_size: int = 900          # target characters per chunk
