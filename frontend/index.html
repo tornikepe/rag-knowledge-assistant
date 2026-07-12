@@ -3,92 +3,251 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RAG Knowledge Assistant</title>
+    <title>Peit — Chat with your documents</title>
+    <meta
+      name="description"
+      content="Peit is an AI knowledge assistant. Upload your documents and get instant, grounded answers with citations."
+    />
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%232563eb'/%3E%3Ctext x='50' y='72' font-size='64' font-family='Arial' font-weight='bold' text-anchor='middle' fill='white'%3EP%3C/text%3E%3C/svg%3E"
     />
   </head>
   <body>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">📚</span>
-          <div>
-            <h1>RAG Assistant</h1>
-            <p class="tagline">Ask your documents anything</p>
+    <!-- ===================== LANDING ===================== -->
+    <div class="view" id="view-landing">
+      <nav class="nav" id="nav">
+        <a href="#/" class="logo" data-link>
+          <span class="logo-mark">P</span>
+          <span class="logo-text">Peit</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features" class="nav-link">Features</a>
+          <a href="#how" class="nav-link">How it works</a>
+          <a href="#/login" class="nav-link" data-link>Log in</a>
+          <a href="#/signup" class="btn btn-primary btn-sm" data-link>Get started</a>
+        </div>
+      </nav>
+
+      <header class="hero">
+        <div class="hero-glow"></div>
+        <div class="hero-inner">
+          <a href="#/signup" class="pill" data-link>
+            <span class="pill-dot"></span> AI-powered knowledge base · try it free
+          </a>
+          <h1 class="hero-title">
+            Chat with your<br />
+            <span class="grad-text">documents.</span>
+          </h1>
+          <p class="hero-sub">
+            Upload PDFs, notes, and docs — Peit reads them and answers your questions
+            with accurate, <strong>cited</strong> responses. No more digging through files.
+          </p>
+          <div class="hero-cta">
+            <a href="#/signup" class="btn btn-primary btn-lg" data-link>Get started free →</a>
+            <a href="#how" class="btn btn-ghost btn-lg">See how it works</a>
+          </div>
+          <div class="hero-trust">
+            <span>✓ Grounded in your sources</span>
+            <span>✓ Inline citations</span>
+            <span>✓ No credit card</span>
           </div>
         </div>
 
-        <section class="panel">
-          <h2>Add knowledge</h2>
+        <!-- Animated product mock -->
+        <div class="hero-mock reveal">
+          <div class="mock-window">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">Peit</span>
+            </div>
+            <div class="mock-body" id="mock-body"></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="section" id="features">
+        <div class="section-head reveal">
+          <h2 class="section-title">Everything you need to <span class="grad-text">know your docs</span></h2>
+          <p class="section-sub">Built on retrieval-augmented generation for answers you can trust.</p>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-card reveal">
+            <div class="feature-icon">🎯</div>
+            <h3>Grounded answers</h3>
+            <p>Every response is generated only from your documents — never made up.</p>
+          </div>
+          <div class="feature-card reveal">
+            <div class="feature-icon">🔗</div>
+            <h3>Inline citations</h3>
+            <p>Each claim links to the exact source passage, so you can verify instantly.</p>
+          </div>
+          <div class="feature-card reveal">
+            <div class="feature-icon">📄</div>
+            <h3>Any document</h3>
+            <p>PDFs, Markdown, and text. Drop them in and start asking in seconds.</p>
+          </div>
+          <div class="feature-card reveal">
+            <div class="feature-icon">💬</div>
+            <h3>Conversation history</h3>
+            <p>Every chat is saved. Pick up where you left off, any time.</p>
+          </div>
+          <div class="feature-card reveal">
+            <div class="feature-icon">⚡</div>
+            <h3>Instant search</h3>
+            <p>Semantic retrieval finds the right passage even when wording differs.</p>
+          </div>
+          <div class="feature-card reveal">
+            <div class="feature-icon">🔒</div>
+            <h3>Your data, yours</h3>
+            <p>Open source and self-hostable. Run it entirely on your own infrastructure.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how">
+        <div class="section-head reveal">
+          <h2 class="section-title">Three steps to answers</h2>
+          <p class="section-sub">From a pile of documents to a conversation — in under a minute.</p>
+        </div>
+        <div class="steps">
+          <div class="step reveal">
+            <div class="step-num">1</div>
+            <h3>Upload</h3>
+            <p>Drag in your PDFs, notes, or Markdown files. Peit chunks and indexes them.</p>
+          </div>
+          <div class="step-line"></div>
+          <div class="step reveal">
+            <div class="step-num">2</div>
+            <h3>Ask</h3>
+            <p>Type a question in plain language, just like chatting with a colleague.</p>
+          </div>
+          <div class="step-line"></div>
+          <div class="step reveal">
+            <div class="step-num">3</div>
+            <h3>Get cited answers</h3>
+            <p>Peit retrieves the relevant passages and answers — with sources attached.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-band reveal">
+        <div class="cta-inner">
+          <h2>Ready to talk to your documents?</h2>
+          <p>Create a free account and index your first document in seconds.</p>
+          <a href="#/signup" class="btn btn-primary btn-lg" data-link>Get started free →</a>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="footer-brand">
+          <span class="logo-mark sm">P</span> <strong>Peit</strong>
+        </div>
+        <p class="footer-copy">
+          Built by Tornike Petriashvili · Open source on
+          <a href="https://github.com/tornikepe/rag-knowledge-assistant" target="_blank" rel="noopener">GitHub</a>
+        </p>
+      </footer>
+    </div>
+
+    <!-- ===================== AUTH ===================== -->
+    <div class="view" id="view-auth">
+      <div class="auth-wrap">
+        <div class="auth-aside">
+          <a href="#/" class="logo light" data-link>
+            <span class="logo-mark">P</span><span class="logo-text">Peit</span>
+          </a>
+          <div class="auth-aside-body">
+            <h2 id="auth-aside-title">Chat with your documents.</h2>
+            <p>Grounded, cited answers from your own knowledge base.</p>
+            <ul class="auth-benefits">
+              <li>✓ Answers grounded in your sources</li>
+              <li>✓ Inline citations you can verify</li>
+              <li>✓ Conversation history, saved</li>
+            </ul>
+          </div>
+          <div class="auth-aside-foot">Trusted by document-heavy teams.</div>
+        </div>
+
+        <div class="auth-panel">
+          <a href="#/" class="auth-back" data-link>← Back to home</a>
+          <div class="auth-card">
+            <h1 id="auth-title">Create your account</h1>
+            <p class="auth-lead" id="auth-lead">Start chatting with your documents in seconds.</p>
+
+            <form id="auth-form" class="auth-form" autocomplete="off">
+              <label class="field" id="name-field">
+                <span>Name</span>
+                <input type="text" id="auth-name" placeholder="Tornike" />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input type="email" id="auth-email" placeholder="you@example.com" required />
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input type="password" id="auth-password" placeholder="••••••••" required minlength="6" />
+              </label>
+              <div class="auth-error" id="auth-error"></div>
+              <button type="submit" class="btn btn-primary btn-block" id="auth-submit">Create account</button>
+            </form>
+
+            <div class="auth-divider"><span>or</span></div>
+            <button class="btn btn-ghost btn-block" id="auth-demo">Continue with a demo account</button>
+
+            <p class="auth-switch" id="auth-switch"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== APP / DASHBOARD ===================== -->
+    <div class="view" id="view-app">
+      <aside class="app-sidebar">
+        <div class="app-brand">
+          <a href="#/" class="logo" data-link><span class="logo-mark sm">P</span><span class="logo-text">Peit</span></a>
+        </div>
+
+        <button class="btn btn-primary btn-block new-chat" id="new-chat-btn">＋ New chat</button>
+
+        <div class="history-wrap">
+          <div class="history-label">Recent chats</div>
+          <ul class="history-list" id="history-list"></ul>
+        </div>
+
+        <div class="app-docs">
+          <div class="panel-head">
+            <span class="history-label">Knowledge base</span>
+            <button class="link-btn" id="clear-btn" title="Clear all documents">Clear</button>
+          </div>
           <label class="dropzone" id="dropzone">
             <input type="file" id="file-input" accept=".pdf,.txt,.md,.markdown" hidden />
-            <span class="dropzone-icon">⬆️</span>
-            <span class="dropzone-text">Drop a PDF / TXT / MD here<br />or click to browse</span>
+            <span class="dropzone-icon">⬆</span>
+            <span>Drop a PDF / TXT / MD<br />or click to upload</span>
           </label>
           <div class="upload-status" id="upload-status"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Indexed documents</h2>
-            <button class="link-btn" id="clear-btn" title="Clear the index">Clear</button>
-          </div>
-          <ul class="doc-list" id="doc-list">
-            <li class="doc-empty">No documents yet.</li>
-          </ul>
-        </section>
-
-        <footer class="sidebar-foot">
-          <div class="status-row">
-            <span class="dot" id="status-dot"></span>
-            <span id="status-text">connecting…</span>
-          </div>
-        </footer>
-      </aside>
-
-      <main class="chat">
-        <header class="chat-head">
-          <div>
-            <h2>Conversation</h2>
-            <p class="muted" id="mode-line">—</p>
-          </div>
-          <div class="head-actions">
-            <button class="icon-btn" id="theme-toggle" title="Toggle light / dark">🌙</button>
-            <a
-              class="ghost-btn"
-              href="/docs"
-              target="_blank"
-              rel="noopener"
-              title="Interactive OpenAPI docs"
-              >API docs ↗</a
-            >
-          </div>
-        </header>
-
-        <div class="messages" id="messages">
-          <div class="empty-state">
-            <div class="empty-emoji">💬</div>
-            <h3>Grounded answers, with sources.</h3>
-            <p>
-              Upload a document, then ask a question. Every answer is generated
-              <strong>only</strong> from the retrieved passages and cites them inline.
-            </p>
-            <div class="suggestions" id="suggestions"></div>
-          </div>
+          <ul class="doc-list" id="doc-list"></ul>
         </div>
 
+        <div class="app-user">
+          <div class="avatar-sm" id="user-avatar">P</div>
+          <div class="user-meta">
+            <span class="user-email" id="user-email">demo@peit.app</span>
+            <span class="user-plan">Free plan</span>
+          </div>
+          <button class="icon-btn" id="theme-toggle" title="Toggle theme">🌙</button>
+          <button class="icon-btn" id="logout-btn" title="Log out">⎋</button>
+        </div>
+      </aside>
+
+      <main class="app-main">
+        <div class="messages" id="messages"></div>
         <form class="composer" id="composer">
-          <textarea
-            id="question"
-            rows="1"
-            placeholder="Ask a question about your documents…"
-            autocomplete="off"
-          ></textarea>
+          <textarea id="question" rows="1" placeholder="Ask anything about your documents…" autocomplete="off"></textarea>
           <button type="submit" id="send-btn" title="Send">➤</button>
         </form>
+        <div class="composer-hint">Peit answers only from your indexed documents, with citations.</div>
       </main>
     </div>
 
