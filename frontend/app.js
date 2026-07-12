@@ -106,7 +106,8 @@ window.addEventListener("hashchange", router);
 //  LANDING
 // ============================================================
 function initLanding() {
-  initHero3D();
+  // Never let the optional 3D hero break navigation — the CSS aurora is the fallback.
+  try { initHero3D(); } catch (_e) { /* WebGL/library unavailable → aurora only */ }
 }
 
 // Interactive 3D hero: a glossy icosphere that "breathes" and follows the pointer.
@@ -125,7 +126,7 @@ function initHero3D() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   // morphing orb
-  const geo = new THREE.IcosahedronGeometry(1.7, 12);
+  const geo = new THREE.IcosahedronGeometry(1.7, 6);
   const base = Float32Array.from(geo.attributes.position.array);
   const orb = new THREE.Mesh(
     geo,

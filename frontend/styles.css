@@ -185,6 +185,10 @@ a {
   position: relative;
   height: 100vh;
   overflow: hidden;
+}
+/* Only render the landing when it's the active view (an #id rule must beat
+   `.view { display:none }`, so the display toggle lives here, not on the base). */
+#view-landing.active {
   display: flex;
   flex-direction: column;
 }
