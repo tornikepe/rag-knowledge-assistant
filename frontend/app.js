@@ -106,7 +106,88 @@ window.addEventListener("hashchange", router);
 //  LANDING
 // ============================================================
 function initLanding() {
-  // The minimal landing animates purely in CSS (the aurora background) — nothing to init.
+  initHero3D();
+}
+
+// Interactive 3D hero: a glossy icosphere that "breathes" and follows the pointer.
+// Original Three.js scene; if the library fails to load, the CSS aurora is the fallback.
+let hero3DStarted = false;
+function initHero3D() {
+  if (hero3DStarted) return;
+  const canvas = document.getElementById("hero-canvas");
+  if (!canvas || typeof THREE === "undefined") return; // graceful fallback → aurora
+  hero3DStarted = true;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.z = 5.2;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  // morphing orb
+  const geo = new THREE.IcosahedronGeometry(1.7, 12);
+  const base = Float32Array.from(geo.attributes.position.array);
+  const orb = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({
+      color: 0x2f6bff,
+      metalness: 0.45,
+      roughness: 0.28,
+      emissive: 0x0b1c4a,
+      emissiveIntensity: 0.55,
+    })
+  );
+  scene.add(orb);
+
+  // colored lighting → blue→cyan→violet gradient sheen
+  scene.add(new THREE.AmbientLight(0x24304f, 0.7));
+  const L = [
+    [0x3b82f6, 2.6, [-4, 3, 4]],
+    [0x22d3ee, 2.3, [4, -3, 3]],
+    [0x8b5cf6, 1.3, [0, 4, -4]],
+    [0xffffff, 0.8, [0, 0, 6]],
+  ];
+  L.forEach(([c, i, p]) => { const l = new THREE.PointLight(c, i, 24); l.position.set(...p); scene.add(l); });
+
+  let mx = 0, my = 0, tx = 0, ty = 0;
+  window.addEventListener("pointermove", (e) => {
+    tx = e.clientX / window.innerWidth - 0.5;
+    ty = e.clientY / window.innerHeight - 0.5;
+  });
+
+  const resize = () => {
+    const w = canvas.clientWidth || window.innerWidth;
+    const h = canvas.clientHeight || window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  const pos = geo.attributes.position;
+  const clock = new THREE.Clock();
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!document.getElementById("view-landing").classList.contains("active")) return;
+    const t = clock.getElapsedTime();
+    for (let i = 0; i < pos.count; i++) {
+      const ix = i * 3;
+      const bx = base[ix], by = base[ix + 1], bz = base[ix + 2];
+      const n = (Math.sin(bx * 2.1 + t) + Math.sin(by * 2.5 + t * 1.15) + Math.sin(bz * 1.9 + t * 0.85)) / 3;
+      const s = 1 + 0.14 * n;
+      pos.setXYZ(i, bx * s, by * s, bz * s);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    // ease pointer for smooth parallax
+    mx += (tx - mx) * 0.05;
+    my += (ty - my) * 0.05;
+    orb.rotation.y = t * 0.12 + mx * 0.8;
+    orb.rotation.x = my * 0.5;
+    renderer.render(scene, camera);
+  }
+  frame();
 }
 
 // ============================================================
