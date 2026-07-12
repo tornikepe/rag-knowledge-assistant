@@ -755,6 +755,36 @@ a {
   min-width: 0;
   background: var(--bg);
 }
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 30px;
+  min-height: 58px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+  backdrop-filter: blur(8px);
+}
+.topbar-title {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -1061,6 +1091,7 @@ a {
   }
   .app-sidebar.open { transform: none; box-shadow: var(--shadow); }
   body.in-app .mobile-menu { display: inline-flex !important; }
+  .app-topbar { padding-left: 62px; }
 }
 @media (max-width: 560px) {
   .hero-min-cta { flex-direction: column; width: 100%; max-width: 320px; }

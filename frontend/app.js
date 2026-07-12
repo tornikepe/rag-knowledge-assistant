@@ -330,9 +330,15 @@ function renderHistory() {
 
 const SUGGESTIONS = ["What is this document about?", "Summarize the key points.", "What are the best practices?"];
 
+function setChatTitle(convo) {
+  const el = $("#chat-title");
+  if (el) el.textContent = convo ? convo.title : "New chat";
+}
+
 function renderMessages() {
   const box = $("#messages");
   const convo = getConvo();
+  setChatTitle(convo);
   box.innerHTML = "";
   if (!convo || !convo.messages.length) {
     box.innerHTML = `
@@ -423,6 +429,7 @@ async function ask(question) {
   if (convo.title === "New chat") convo.title = question.slice(0, 40);
   persist(convo);
   renderHistory();
+  setChatTitle(convo);
   addMessageEl("user", question);
 
   const msg = addMessageEl("assistant", "");
