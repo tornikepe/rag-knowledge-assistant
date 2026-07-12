@@ -1,12 +1,13 @@
 <div align="center">
 
-# 📚 RAG Knowledge Assistant
+# 📘 Peit — RAG Knowledge Assistant
 
-**Ask your documents anything — get grounded, cited answers.**
+**Chat with your documents — get grounded, cited answers.**
 
-A production-shaped Retrieval-Augmented Generation (RAG) service: upload PDFs, text, or
-Markdown, and query them in natural language. Every answer is generated **only** from the
-retrieved passages and cites its sources inline.
+A production-shaped Retrieval-Augmented Generation (RAG) product: a full SaaS-style web app
+(landing page, sign-up/login, dashboard with saved conversation history) on top of a FastAPI
+RAG backend. Upload PDFs, text, or Markdown and query them in natural language — every answer
+is generated **only** from the retrieved passages and cites its sources inline.
 
 **▶ [Live demo](https://rag-knowledge-assistant-blue.vercel.app)** · deployed on Vercel
 
@@ -36,9 +37,18 @@ retrieved passages and cites its sources inline.
 - **Pluggable providers** — swap embeddings (OpenAI ↔ offline) and the LLM (Claude ↔
   offline) behind clean interfaces; the vector store is equally swappable (Chroma /
   pgvector / Pinecone).
-- **Clean chat UI** — dependency-free single-page front end, light + dark theme.
+- **Full product UI ("Peit")** — a from-scratch, framework-free single-page app: animated
+  marketing landing page, email/password sign-up & login, and a dashboard with saved
+  conversation history, knowledge-base management, light + dark theme, and a responsive
+  layout. *(Auth and history are client-side — see the note below — so the live demo needs
+  no database.)*
 - **Fully tested & CI-ready** — the whole pipeline is exercised offline; `pytest` passes
   with no keys and no network.
+
+> **Note on auth & history.** To keep the public demo zero-backend, sign-up/login and chat
+> history are implemented client-side (localStorage). The RAG endpoints (`/api/*`) are the
+> real backend. For production, swap in a real auth provider (e.g. Clerk/Auth.js) and a
+> database (e.g. Postgres/Neon) — the frontend is structured so this is a drop-in change.
 
 ## 🖼️ Demo
 
