@@ -8,9 +8,9 @@ A production-shaped Retrieval-Augmented Generation (RAG) service: upload PDFs, t
 Markdown, and query them in natural language. Every answer is generated **only** from the
 retrieved passages and cites its sources inline.
 
-**▶ [Live demo](https://rag-knowledge-assistant.vercel.app)** · deployed on Vercel
+**▶ [Live demo](https://rag-knowledge-assistant-blue.vercel.app)** · deployed on Vercel
 
-[![Live Demo](https://img.shields.io/badge/live_demo-online-3fb950)](https://rag-knowledge-assistant.vercel.app)
+[![Live Demo](https://img.shields.io/badge/live_demo-online-3fb950)](https://rag-knowledge-assistant-blue.vercel.app)
 [![CI](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)
