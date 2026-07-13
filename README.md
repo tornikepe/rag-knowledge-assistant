@@ -146,6 +146,40 @@ ANTHROPIC_MODEL=claude-opus-4-8
 | `TOP_K`              | `4`                  | Chunks retrieved per query                              |
 | `STORAGE_DIR`        | `storage`            | Where the vector index is persisted                    |
 
+## 🔐 Real Google / GitHub OAuth (optional)
+
+The login popup's **Continue with Google / GitHub** buttons use real OAuth 2.0 when
+configured, and fall back to a demo login otherwise — so the app works out of the box and
+"upgrades" the moment you add credentials. The backend (`app/api/auth.py`) runs the
+Authorization Code flow and issues a signed session cookie; nothing extra is needed on the
+client.
+
+To enable it:
+
+1. **Create the OAuth apps** and copy each client id + secret:
+   - **Google** — [Google Cloud Console](https://console.cloud.google.com/apis/credentials) →
+     *Create Credentials → OAuth client ID → Web application*.
+   - **GitHub** — [Developer settings → OAuth Apps](https://github.com/settings/developers) →
+     *New OAuth App*.
+2. **Set the redirect (callback) URLs** to your deployment, exactly:
+   - `https://<your-app>.vercel.app/api/auth/google/callback`
+   - `https://<your-app>.vercel.app/api/auth/github/callback`
+3. **Set the environment variables** (locally in `.env`, or in the Vercel project settings):
+   ```ini
+   SESSION_SECRET=<a long random string>
+   OAUTH_REDIRECT_BASE=https://<your-app>.vercel.app
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   GITHUB_CLIENT_ID=...
+   GITHUB_CLIENT_SECRET=...
+   ```
+
+`GET /api/auth/providers` reports which providers are live. Auth routes: `/api/auth/{provider}/login`,
+`/api/auth/{provider}/callback`, `/api/auth/me`, `/api/auth/logout`.
+
+> Session identity is separate from RAG data — the shared demo index isn't yet partitioned
+> per user. Add per-user collections behind the `VectorStore` interface for true multi-tenancy.
+
 ## 🔌 API
 
 Interactive OpenAPI docs are served at **`/docs`**.

@@ -233,6 +233,18 @@ function closeAuth() {
   if (err) err.textContent = "";
 }
 
+function oauthClick(provider) {
+  if (window.__oauthProviders && window.__oauthProviders[provider]) {
+    location.href = `/api/auth/${provider}/login`; // real OAuth redirect
+  } else {
+    // Provider not configured yet → demo login so the flow still completes.
+    const demo = provider === "google"
+      ? { name: "Google user", email: "you@gmail.com", provider: "demo" }
+      : { name: "GitHub user", email: "you@users.noreply.github.com", provider: "demo" };
+    loginUser(demo);
+  }
+}
+
 function bindAuth() {
   $("#auth-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -258,14 +270,10 @@ function bindAuth() {
     }
   });
 
-  // Social sign-in. Real OAuth needs a backend; for the zero-backend demo these
-  // sign you in as a provider-labelled account so the flow is complete.
-  $("#oauth-google").addEventListener("click", () =>
-    loginUser({ name: "Google user", email: "you@gmail.com", provider: "google" })
-  );
-  $("#oauth-github").addEventListener("click", () =>
-    loginUser({ name: "GitHub user", email: "you@users.noreply.github.com", provider: "github" })
-  );
+  // Social sign-in: real OAuth when the provider is configured on the backend,
+  // otherwise a demo login so the flow still completes.
+  $("#oauth-google").addEventListener("click", () => oauthClick("google"));
+  $("#oauth-github").addEventListener("click", () => oauthClick("github"));
 
   // Close the popup: ✕ button, click on the backdrop, or Escape.
   $("#auth-close").addEventListener("click", closeAuth);
@@ -591,7 +599,11 @@ function bindApp() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
   $("#new-chat-btn").addEventListener("click", newChat);
-  $("#logout-btn").addEventListener("click", () => { store.clearUser(); goHome(); });
+  $("#logout-btn").addEventListener("click", async () => {
+    try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
+    store.clearUser();
+    goHome();
+  });
   $("#theme-toggle").addEventListener("click", () => applyTheme(effectiveTheme() === "dark" ? "light" : "dark"));
 
   // uploads
@@ -616,13 +628,54 @@ function bindApp() {
 // ============================================================
 //  INIT
 // ============================================================
-applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
-bindAuth();
-if (store.user()) {
-  showView("view-app");
-  initApp();
-} else {
-  showView("view-landing");
-  updateNav();
-  initLanding();
+async function refreshProviders() {
+  try {
+    window.__oauthProviders = await (await fetch("/api/auth/providers")).json();
+  } catch {
+    window.__oauthProviders = { google: false, github: false };
+  }
 }
+
+async function refreshSession() {
+  try {
+    const r = await fetch("/api/auth/me");
+    if (r.ok) {
+      const me = await r.json();
+      if (me && me.email) {
+        store.setUser({ name: me.name, email: me.email, provider: me.provider });
+        return;
+      }
+    }
+  } catch {}
+  // No valid server session — drop a stale real-OAuth user (demo/password users persist).
+  const u = store.user();
+  if (u && (u.provider === "google" || u.provider === "github")) store.clearUser();
+}
+
+function handleAuthQuery() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("auth")) return;
+  const status = params.get("auth");
+  history.replaceState(null, "", location.pathname);
+  if (status === "error") {
+    openAuth("login");
+    $("#auth-error").textContent = "Sign-in failed. Please try again.";
+  }
+}
+
+async function boot() {
+  applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
+  bindAuth();
+  await Promise.all([refreshProviders(), refreshSession()]);
+  if (store.user()) {
+    showView("view-app");
+    initApp();
+  } else {
+    showView("view-landing");
+    updateNav();
+    initLanding();
+  }
+  handleAuthQuery();
+}
+
+boot();

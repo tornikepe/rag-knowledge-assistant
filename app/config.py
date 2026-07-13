@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-opus-4-8"
     max_tokens: int = 1024
 
+    # --- OAuth (real Google / GitHub sign-in) ---
+    # Enabled per-provider only when both id + secret are set; otherwise the UI
+    # falls back to demo login. See README → "Real Google / GitHub OAuth".
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    session_secret: str = "dev-insecure-change-me"  # set a strong value in production
+    # Exact public base URL for OAuth redirects, e.g. https://your-app.vercel.app
+    # (must match the provider's registered redirect URI). Derived from the request
+    # when unset.
+    oauth_redirect_base: str | None = None
+
     @property
     def index_dir(self) -> Path:
         return self.storage_dir / "index"

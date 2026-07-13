@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app.api.auth import router as auth_router
 from app.api.routes import router
 from app.config import Settings, get_settings
 from app.core.service import RAGService, build_service
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.seed_sample_docs:
         _seed_sample_docs(app.state.service)
 
+    app.include_router(auth_router)
     app.include_router(router)
 
     if FRONTEND_DIR.exists():
