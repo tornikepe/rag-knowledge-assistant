@@ -33,7 +33,7 @@ def send_verification_email(settings: Settings, to_email: str, name: str, code: 
     )
 
     context = ssl.create_default_context()
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=8) as server:
         if settings.smtp_starttls:
             server.starttls(context=context)
         server.login(settings.smtp_user, settings.smtp_password)

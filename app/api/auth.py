@@ -8,6 +8,7 @@ route bounces back so the UI can fall back to demo login.
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 
@@ -108,10 +109,16 @@ def signup_start(body: SignupStartRequest):
         ttl=SIGNUP_CODE_TTL,
     )
 
+    logging.getLogger("peit").info(
+        "signup email: enabled=%s host=%s port=%s user_set=%s pass_set=%s starttls=%s",
+        s.email_enabled, s.smtp_host, s.smtp_port, bool(s.smtp_user),
+        bool(s.smtp_password), s.smtp_starttls,
+    )
     delivered = False
     try:
         delivered = send_verification_email(s, email, name, code)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — log the real reason (timeout/auth/etc.)
+        logging.getLogger("peit").warning("verification email failed: %r", exc)
         delivered = False
 
     resp: dict = {"ok": True, "token": token, "delivered": delivered, "email": email}
