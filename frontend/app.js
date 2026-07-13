@@ -203,21 +203,31 @@ function initHero3D() {
 //  AUTH
 // ============================================================
 function setAuthMode(mode) {
-  const isSignup = mode === "signup";
   showCodeStep(false);
-  $("#auth-title").textContent = isSignup ? "Create your account" : "Welcome back";
-  $("#auth-lead").textContent = isSignup
-    ? "Start chatting with your documents in seconds."
-    : "Log in to continue to your knowledge base.";
-  $("#auth-submit").textContent = isSignup ? "Create account" : "Log in";
+  const isSignup = mode === "signup";
+  const isReset = mode === "reset";
+  const copy = {
+    login: ["Welcome back", "Log in to continue to your knowledge base.", "Log in"],
+    signup: ["Create your account", "Start chatting with your documents in seconds.", "Create account"],
+    reset: ["Reset your password", "Enter your email and we'll send you a reset code.", "Send reset code"],
+  }[mode] || ["Welcome back", "Log in to continue to your knowledge base.", "Log in"];
+  $("#auth-title").textContent = copy[0];
+  $("#auth-lead").textContent = copy[1];
+  $("#auth-submit").textContent = copy[2];
   $("#name-field").style.display = isSignup ? "" : "none";
+  $("#password-field").style.display = isReset ? "none" : "";
   $("#confirm-field").style.display = isSignup ? "" : "none";
+  $("#forgot-row").hidden = mode !== "login";
+  // Social sign-in applies to login/signup, not the password-reset step.
+  $(".oauth-row").style.display = isReset ? "none" : "";
+  $("#auth-step-main .auth-divider").style.display = isReset ? "none" : "";
   $("#auth-error").textContent = "";
   $("#auth-switch").innerHTML = isSignup
     ? `Already have an account? <a data-auth="login">Log in</a>`
-    : `New to Peit? <a data-auth="signup">Create an account</a>`;
+    : isReset
+      ? `Remembered your password? <a data-auth="login">Log in</a>`
+      : `New to Peit? <a data-auth="signup">Create an account</a>`;
   $("#auth-form").dataset.mode = mode;
-  if (isSignup && !$("#auth-name").value.trim()) $("#auth-name").value = "Test";
 }
 
 function showCodeStep(on) {
@@ -252,36 +262,67 @@ function oauthClick(provider) {
   }
 }
 
+// Ask the backend to email a one-time code. Throws (with a user-facing message)
+// when it can't be delivered — email sign-in requires SMTP to be configured.
+async function requestCode(email, name) {
+  const r = await fetch("/api/auth/signup/start", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name: name || "" }),
+  });
+  const data = await r.json();
+  if (!r.ok || !data.ok) throw new Error(data.error || "Could not send a code. Try again.");
+  if (!data.delivered) {
+    if (data.demo_code) console.info("[Peit] verification code:", data.demo_code); // dev aid
+    throw new Error("Email delivery isn't set up yet — please use Google or GitHub to sign in.");
+  }
+  return data;
+}
+
+function prepareCodeStep(email, mode) {
+  const isReset = mode === "reset";
+  $("#code-email").textContent = email;
+  $("#code-lead").innerHTML = `We sent a 6-digit code to <strong>${escapeHtml(email)}</strong>.`;
+  $("#auth-code").value = "";
+  $("#code-error").textContent = "";
+  $("#reset-pass-field").hidden = !isReset;
+  $("#reset-confirm-field").hidden = !isReset;
+  if (isReset) { $("#reset-pass").value = ""; $("#reset-confirm").value = ""; }
+  $("#code-submit").textContent = isReset ? "Reset password" : "Verify & continue";
+  showCodeStep(true);
+  setTimeout(() => $("#auth-code")?.focus(), 60);
+}
+
 async function startSignup(name, email, password) {
+  const finalName = name || email.split("@")[0];
   const err = $("#auth-error");
   $("#auth-submit").disabled = true;
   $("#auth-submit").textContent = "Sending code…";
   try {
-    const r = await fetch("/api/auth/signup/start", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name }),
-    });
-    const data = await r.json();
-    if (!r.ok || !data.ok) throw new Error(data.error || "Could not send a code. Try again.");
+    const data = await requestCode(email, finalName);
     // Stash the details; the account is only created once the code is verified.
-    state.pendingSignup = { name, email, password, token: data.token };
-    $("#code-email").textContent = email;
-    const demo = $("#demo-code");
-    if (data.demo_code) {
-      demo.hidden = false;
-      demo.innerHTML = `Demo mode (no email server configured) — your code is <strong>${escapeHtml(data.demo_code)}</strong>`;
-    } else {
-      demo.hidden = true;
-    }
-    $("#auth-code").value = "";
-    $("#code-error").textContent = "";
-    showCodeStep(true);
-    setTimeout(() => $("#auth-code")?.focus(), 60);
+    state.pendingSignup = { name: finalName, email, password, token: data.token, mode: "signup" };
+    prepareCodeStep(email, "signup");
   } catch (e) {
     err.textContent = e.message;
   } finally {
     $("#auth-submit").disabled = false;
     $("#auth-submit").textContent = "Create account";
+  }
+}
+
+async function startReset(email) {
+  const err = $("#auth-error");
+  $("#auth-submit").disabled = true;
+  $("#auth-submit").textContent = "Sending code…";
+  try {
+    const data = await requestCode(email, "");
+    state.pendingSignup = { email, token: data.token, mode: "reset" };
+    prepareCodeStep(email, "reset");
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    $("#auth-submit").disabled = false;
+    $("#auth-submit").textContent = "Send reset code";
   }
 }
 
@@ -291,6 +332,15 @@ async function verifyCode() {
   if (!p) { err.textContent = "Something went wrong. Start again."; return; }
   const code = $("#auth-code").value.trim();
   if (!/^\d{4,6}$/.test(code)) { err.textContent = "Enter the code from your email."; return; }
+
+  let newPass = null;
+  if (p.mode === "reset") {
+    newPass = $("#reset-pass").value;
+    if (newPass.length < 6) { err.textContent = "New password must be at least 6 characters."; return; }
+    if (newPass !== $("#reset-confirm").value) { err.textContent = "Passwords don't match."; return; }
+  }
+
+  const original = $("#code-submit").textContent;
   $("#code-submit").disabled = true;
   $("#code-submit").textContent = "Verifying…";
   try {
@@ -300,17 +350,26 @@ async function verifyCode() {
     });
     const data = await r.json();
     if (!r.ok || !data.ok) throw new Error(data.error || "Incorrect code. Try again.");
-    // Persist a local account (so password login works later) and sign in.
+
     const accounts = store.accounts();
-    accounts[p.email] = { name: p.name, pass: btoa(p.password) };
-    store.setAccounts(accounts);
-    state.pendingSignup = null;
-    loginUser({ name: p.name, email: p.email, provider: "email" });
+    if (p.mode === "reset") {
+      const existing = accounts[p.email];
+      const name = (existing && existing.name) || data.name || p.email.split("@")[0];
+      accounts[p.email] = { name, pass: btoa(newPass) };
+      store.setAccounts(accounts);
+      state.pendingSignup = null;
+      loginUser({ name, email: p.email, provider: "email" });
+    } else {
+      accounts[p.email] = { name: p.name, pass: btoa(p.password) };
+      store.setAccounts(accounts);
+      state.pendingSignup = null;
+      loginUser({ name: p.name, email: p.email, provider: "email" });
+    }
   } catch (e) {
     err.textContent = e.message;
   } finally {
     $("#code-submit").disabled = false;
-    $("#code-submit").textContent = "Verify & continue";
+    $("#code-submit").textContent = original;
   }
 }
 
@@ -325,13 +384,15 @@ function bindAuth() {
     const err = $("#auth-error");
     err.textContent = "";
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
-    if (password.length < 6) { err.textContent = "Password must be at least 6 characters."; return; }
 
+    if (mode === "reset") { startReset(email); return; }
+
+    if (password.length < 6) { err.textContent = "Password must be at least 6 characters."; return; }
     const accounts = store.accounts();
     if (mode === "signup") {
       if (password !== confirm) { err.textContent = "Passwords don't match."; return; }
       if (accounts[email]) { err.textContent = "An account with this email already exists. Try logging in."; return; }
-      startSignup(name || "Test", email, password);
+      startSignup(name, email, password);
     } else {
       const acc = accounts[email];
       if (!acc || acc.pass !== btoa(password)) { err.textContent = "Wrong email or password."; return; }
@@ -341,6 +402,7 @@ function bindAuth() {
 
   $("#auth-step-code").addEventListener("submit", (e) => { e.preventDefault(); verifyCode(); });
   $("#code-back").addEventListener("click", () => { showCodeStep(false); state.pendingSignup = null; });
+  $("#forgot-link").addEventListener("click", () => setAuthMode("reset"));
 
   $("#oauth-google").addEventListener("click", () => oauthClick("google"));
   $("#oauth-github").addEventListener("click", () => oauthClick("github"));
@@ -733,7 +795,6 @@ function saveAccount(e) {
 }
 
 function openSettings() {
-  $("#settings-model").textContent = window.__model || "Claude";
   openModal("settings-modal");
 }
 
@@ -757,6 +818,7 @@ function bindApp() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
   $("#new-chat-btn").addEventListener("click", newChat);
+  $("#topbar-new-chat").addEventListener("click", newChat);
 
   // per-chat uploads
   $("#attach-btn").addEventListener("click", () => $("#file-input").click());
@@ -820,10 +882,6 @@ async function refreshProviders() {
   }
 }
 
-async function refreshHealth() {
-  try { const h = await (await fetch("/api/health")).json(); window.__model = h.model; } catch {}
-}
-
 async function refreshSession() {
   try {
     const r = await fetch("/api/auth/me");
@@ -856,7 +914,7 @@ function handleAuthQuery() {
 async function boot() {
   applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
   bindAuth();
-  await Promise.all([refreshProviders(), refreshSession(), refreshHealth()]);
+  await Promise.all([refreshProviders(), refreshSession()]);
   if (store.user()) {
     showView("view-app");
     initApp();

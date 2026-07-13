@@ -518,6 +518,11 @@ a {
 .auth-switch a:hover {
   text-decoration: underline;
 }
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+}
 
 /* ============================================================
    APP / DASHBOARD
@@ -525,9 +530,14 @@ a {
 #view-app {
   grid-template-columns: 300px 1fr;
   height: 100vh;
+  height: 100dvh;
+  grid-template-rows: 100vh;
+  grid-template-rows: 100dvh;
+  overflow: hidden; /* each pane scrolls internally; the page itself never scrolls */
 }
 .app-sidebar {
   position: relative;
+  min-height: 0;
   background: var(--bg-2);
   border-right: 1px solid var(--border);
   display: flex;
@@ -846,6 +856,7 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--bg);
 }
 .app-topbar {
@@ -860,11 +871,16 @@ a {
   backdrop-filter: blur(8px);
 }
 .topbar-title {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.topbar-new {
+  flex-shrink: 0;
 }
 .topbar-status {
   display: inline-flex;
@@ -880,6 +896,7 @@ a {
 }
 .messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 30px;
   display: flex;
@@ -1162,19 +1179,18 @@ a {
 }
 .attach-btn {
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--panel);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: none;
   color: var(--muted);
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 .attach-btn:hover {
-  border-color: var(--brand);
   color: var(--brand);
   background: var(--grad-soft);
 }
@@ -1182,40 +1198,44 @@ a {
   outline: 2px dashed var(--brand);
   outline-offset: -8px;
 }
+/* Unified input bar: attach + textarea + send share one rounded container. */
 .composer {
   display: flex;
-  gap: 10px;
-  padding: 6px 0 4px;
+  gap: 6px;
+  padding: 7px 7px 7px 8px;
   align-items: flex-end;
   width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.composer:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
 }
 .composer textarea {
   flex: 1;
   resize: none;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: none;
+  border: none;
   color: var(--text);
-  border-radius: var(--radius);
-  padding: 13px 15px;
+  padding: 9px 4px;
   font: inherit;
   font-size: 14.5px;
   line-height: 1.5;
   max-height: 170px;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.composer textarea:focus {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
 }
 #send-btn {
   background: var(--grad);
   color: #fff;
   border: none;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius);
-  font-size: 17px;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  font-size: 16px;
   cursor: pointer;
   flex-shrink: 0;
   transition: filter 0.15s, transform 0.1s;
@@ -1279,6 +1299,7 @@ a {
   .messages { padding: 22px 16px; }
   .composer-wrap { padding: 4px 16px 0; }
   .topbar-status { display: none; }
+  .topbar-new { display: none; }
 }
 @media (max-width: 480px) {
   .modal-card { padding: 24px 20px; border-radius: 18px; }
