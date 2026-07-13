@@ -26,6 +26,7 @@ class Record:
     text: str
     source: str
     chunk_index: int
+    collection: str = ""  # scopes a chunk to a chat/collection ("" = default)
 
 
 @dataclass
@@ -39,18 +40,25 @@ class VectorStore(ABC):
     def add(self, records: list[Record], embeddings: np.ndarray) -> None: ...
 
     @abstractmethod
-    def search(self, query_embedding: np.ndarray, k: int) -> list[SearchResult]: ...
+    def search(
+        self, query_embedding: np.ndarray, k: int, collection: str | None = None
+    ) -> list[SearchResult]:
+        """Search, optionally restricted to a single collection (chat)."""
 
     @abstractmethod
     def count(self) -> int: ...
 
     @abstractmethod
-    def documents(self) -> dict[str, int]:
-        """Map of source filename -> number of chunks."""
+    def documents(self, collection: str | None = None) -> dict[str, int]:
+        """Map of source filename -> number of chunks (optionally within a collection)."""
 
     @abstractmethod
-    def remove_document(self, source: str) -> int:
-        """Remove every chunk belonging to ``source``. Returns how many were removed."""
+    def remove_document(self, source: str, collection: str | None = None) -> int:
+        """Remove every chunk belonging to ``source`` (optionally within a collection)."""
+
+    @abstractmethod
+    def remove_collection(self, collection: str) -> int:
+        """Remove every chunk in a collection (e.g. when a chat is deleted)."""
 
     @abstractmethod
     def clear(self) -> None: ...
@@ -110,7 +118,9 @@ class NumpyVectorStore(VectorStore):
             self._records.extend(records)
             self._persist()
 
-    def search(self, query_embedding: np.ndarray, k: int) -> list[SearchResult]:
+    def search(
+        self, query_embedding: np.ndarray, k: int, collection: str | None = None
+    ) -> list[SearchResult]:
         with self._lock:
             if self._matrix is None or self._matrix.size == 0:
                 return []
@@ -118,25 +128,51 @@ class NumpyVectorStore(VectorStore):
             query = query_embedding.astype(np.float32).reshape(-1)
             # Rows and query are unit-normalized, so the dot product is cosine similarity.
             scores = matrix @ query
-            k = min(k, len(records))
-            top = np.argpartition(-scores, k - 1)[:k]
-            top = top[np.argsort(-scores[top])]
+            # Restrict to a single chat's documents when a collection is given.
+            candidates = [
+                i
+                for i in range(len(records))
+                if collection is None or records[i].collection == collection
+            ]
+            if not candidates:
+                return []
+            candidates.sort(key=lambda i: -scores[i])
+            top = candidates[: min(k, len(candidates))]
             return [SearchResult(records[i], float(scores[i])) for i in top]
 
     def count(self) -> int:
         return len(self._records)
 
-    def documents(self) -> dict[str, int]:
+    def documents(self, collection: str | None = None) -> dict[str, int]:
         counts: dict[str, int] = {}
         for record in self._records:
+            if collection is not None and record.collection != collection:
+                continue
             counts[record.source] = counts.get(record.source, 0) + 1
         return counts
 
-    def remove_document(self, source: str) -> int:
+    def remove_document(self, source: str, collection: str | None = None) -> int:
         with self._lock:
             if not self._records:
                 return 0
-            keep = [i for i, r in enumerate(self._records) if r.source != source]
+            keep = [
+                i
+                for i, r in enumerate(self._records)
+                if not (r.source == source and (collection is None or r.collection == collection))
+            ]
+            removed = len(self._records) - len(keep)
+            if removed == 0:
+                return 0
+            self._records = [self._records[i] for i in keep]
+            self._matrix = self._matrix[keep] if (keep and self._matrix is not None) else None
+            self._persist()
+            return removed
+
+    def remove_collection(self, collection: str) -> int:
+        with self._lock:
+            if not self._records:
+                return 0
+            keep = [i for i, r in enumerate(self._records) if r.collection != collection]
             removed = len(self._records) - len(keep)
             if removed == 0:
                 return 0

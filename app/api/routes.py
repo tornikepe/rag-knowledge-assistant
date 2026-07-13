@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app import __version__
@@ -40,7 +40,11 @@ def health(request: Request) -> HealthResponse:
 
 
 @router.post("/ingest", response_model=IngestResponse, tags=["documents"])
-async def ingest(request: Request, file: UploadFile = File(...)) -> IngestResponse:
+async def ingest(
+    request: Request,
+    file: UploadFile = File(...),
+    collection: str = Form(""),
+) -> IngestResponse:
     service = _service(request)
     data = await file.read()
 
@@ -51,7 +55,7 @@ async def ingest(request: Request, file: UploadFile = File(...)) -> IngestRespon
         raise HTTPException(400, "Empty file")
 
     try:
-        added = service.ingest(file.filename or "upload", data)
+        added = service.ingest(file.filename or "upload", data, collection=collection)
     except UnsupportedFileType as exc:
         raise HTTPException(415, str(exc)) from exc
 
@@ -69,7 +73,7 @@ async def ingest(request: Request, file: UploadFile = File(...)) -> IngestRespon
 @router.post("/query", response_model=QueryResponse, tags=["query"])
 def query(request: Request, body: QueryRequest) -> QueryResponse:
     service = _service(request)
-    answer, citations = service.query(body.question, body.top_k)
+    answer, citations = service.query(body.question, body.top_k, collection=body.collection)
     return QueryResponse(answer=answer, citations=citations, model=service.llm.model)
 
 
@@ -80,7 +84,7 @@ def query_stream(request: Request, body: QueryRequest) -> StreamingResponse:
     Emits ``citations`` first, then a series of ``token`` events, then ``done``.
     """
     service = _service(request)
-    token_stream, citations = service.stream(body.question, body.top_k)
+    token_stream, citations = service.stream(body.question, body.top_k, collection=body.collection)
 
     def event_generator():
         payload = [c.model_dump() for c in citations]
@@ -93,9 +97,9 @@ def query_stream(request: Request, body: QueryRequest) -> StreamingResponse:
 
 
 @router.get("/documents", response_model=DocumentsResponse, tags=["documents"])
-def documents(request: Request) -> DocumentsResponse:
+def documents(request: Request, collection: str | None = Query(default=None)) -> DocumentsResponse:
     service = _service(request)
-    docs = service.store.documents()
+    docs = service.documents(collection=collection)
     return DocumentsResponse(
         documents=[DocumentInfo(source=s, chunks=n) for s, n in sorted(docs.items())],
         total_chunks=service.store.count(),
@@ -103,9 +107,11 @@ def documents(request: Request) -> DocumentsResponse:
 
 
 @router.delete("/documents/{source:path}", tags=["documents"])
-def delete_document(request: Request, source: str) -> dict[str, object]:
+def delete_document(
+    request: Request, source: str, collection: str | None = Query(default=None)
+) -> dict[str, object]:
     service = _service(request)
-    removed = service.store.remove_document(source)
+    removed = service.remove_document(source, collection=collection)
     if removed == 0:
         raise HTTPException(404, f"No indexed document named {source!r}")
     return {

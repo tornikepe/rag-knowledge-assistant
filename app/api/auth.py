@@ -8,18 +8,33 @@ route bounces back so the UI can fall back to demo login.
 
 from __future__ import annotations
 
+import re
 import secrets
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.core import oauth
+from app.core.email import send_verification_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 STATE_COOKIE = "peit_oauth_state"
 SESSION_COOKIE = "peit_session"
+SIGNUP_CODE_TTL = 600  # seconds a verification code stays valid
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class SignupStartRequest(BaseModel):
+    email: str = Field(..., max_length=254)
+    name: str = Field(default="", max_length=120)
+
+
+class SignupVerifyRequest(BaseModel):
+    token: str = Field(..., max_length=4000)
+    code: str = Field(..., min_length=4, max_length=12)
 
 
 def _is_https(request: Request) -> bool:
@@ -61,6 +76,67 @@ def me(request: Request):
 def logout():
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+
+def _set_session_cookie(resp, request: Request, user: dict) -> None:
+    s = get_settings()
+    token = oauth.sign_session(user, s.session_secret)
+    resp.set_cookie(
+        SESSION_COOKIE, token, max_age=7 * 24 * 3600, httponly=True,
+        secure=_is_https(request), samesite="lax", path="/",
+    )
+
+
+@router.post("/signup/start")
+def signup_start(body: SignupStartRequest):
+    """Begin email sign-up: issue a signed token carrying a one-time code, and email it.
+
+    Stateless — the code lives inside the HMAC-signed token, so no server storage is
+    needed. When SMTP isn't configured the code is returned for the demo flow.
+    """
+    s = get_settings()
+    email = body.email.strip().lower()
+    if not _EMAIL_RE.match(email):
+        return JSONResponse({"ok": False, "error": "Enter a valid email address."}, status_code=400)
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    name = body.name.strip() or "Test"
+    token = oauth.sign_session(
+        {"email": email, "name": name, "code": code, "kind": "signup"},
+        s.session_secret,
+        ttl=SIGNUP_CODE_TTL,
+    )
+
+    delivered = False
+    try:
+        delivered = send_verification_email(s, email, name, code)
+    except Exception:
+        delivered = False
+
+    resp: dict = {"ok": True, "token": token, "delivered": delivered, "email": email}
+    if not delivered:
+        # Demo fallback: no SMTP configured (or send failed) — surface the code so the
+        # user can still complete verification.
+        resp["demo_code"] = code
+    return resp
+
+
+@router.post("/signup/verify")
+def signup_verify(body: SignupVerifyRequest, request: Request):
+    """Check the code against the signed token and, on success, start a session."""
+    s = get_settings()
+    data = oauth.verify_session(body.token, s.session_secret)
+    if not data or data.get("kind") != "signup":
+        return JSONResponse(
+            {"ok": False, "error": "Your code expired. Please start again."}, status_code=400
+        )
+    if not secrets.compare_digest(str(data.get("code", "")), body.code.strip()):
+        return JSONResponse({"ok": False, "error": "Incorrect code. Try again."}, status_code=400)
+
+    user = {"email": data["email"], "name": data.get("name", "Test"), "provider": "email"}
+    resp = JSONResponse({"ok": True, **user})
+    _set_session_cookie(resp, request, user)
     return resp
 
 

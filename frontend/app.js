@@ -2,12 +2,13 @@
    Peit — single-page app (router + auth + landing + chat)
    No framework, no build step.
 
-   NOTE: authentication + chat history are client-side (localStorage) so the
-   live demo works with zero backend/database. The RAG endpoints (/api/*) are
-   the real backend. See README for wiring a real auth + DB backend.
+   NOTE: sign-up/login and chat history are client-side (localStorage) so the
+   live demo works with zero database. Email verification, OAuth, and the RAG
+   endpoints (/api/*) are the real backend. Documents are scoped per chat.
    ============================================================ */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const MARK = '<svg class="mark-ic" aria-hidden="true"><use href="#peit-mark" /></svg>';
 
 // ---------- storage ----------
 const store = {
@@ -20,7 +21,7 @@ const store = {
   setConvos: (email, c) => localStorage.setItem(`peit_convos_${email}`, JSON.stringify(c)),
 };
 
-const state = { currentConvoId: null, landingInit: false, appBound: false };
+const state = { currentConvoId: null, appBound: false, pendingSignup: null };
 
 // ---------- helpers ----------
 function escapeHtml(s) {
@@ -31,8 +32,12 @@ function escapeHtml(s) {
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
-function initials(email) {
-  return (email || "P").trim()[0].toUpperCase();
+function initials(nameOrEmail) {
+  const s = (nameOrEmail || "P").trim();
+  return (s[0] || "P").toUpperCase();
+}
+function displayName(user) {
+  return (user && (user.name || (user.email || "").split("@")[0])) || "there";
 }
 
 // ---------- tiny markdown renderer ----------
@@ -73,7 +78,7 @@ function renderMarkdown(src) {
 function showView(id) {
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === id));
   document.body.classList.toggle("in-app", id === "view-app");
-  $(".app-sidebar")?.classList.remove("open");
+  closeSidebar();
   window.scrollTo(0, 0);
 }
 
@@ -121,7 +126,6 @@ function initLanding() {
 }
 
 // Interactive 3D hero: a glossy icosphere that "breathes" and follows the pointer.
-// Original Three.js scene; if the library fails to load, the CSS aurora is the fallback.
 let hero3DStarted = false;
 function initHero3D() {
   if (hero3DStarted) return;
@@ -131,26 +135,21 @@ function initHero3D() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.z = 8.5; // further back → the orb reads as a smaller background accent
+  camera.position.z = 8.5;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-  // morphing orb
   const geo = new THREE.IcosahedronGeometry(1.7, 6);
   const base = Float32Array.from(geo.attributes.position.array);
   const orb = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({
-      color: 0x2f6bff,
-      metalness: 0.45,
-      roughness: 0.28,
-      emissive: 0x0b1c4a,
-      emissiveIntensity: 0.55,
+      color: 0x2f6bff, metalness: 0.45, roughness: 0.28,
+      emissive: 0x0b1c4a, emissiveIntensity: 0.55,
     })
   );
   scene.add(orb);
 
-  // colored lighting → blue→cyan→violet gradient sheen
   scene.add(new THREE.AmbientLight(0x24304f, 0.7));
   const L = [
     [0x3b82f6, 2.6, [-4, 3, 4]],
@@ -191,7 +190,6 @@ function initHero3D() {
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    // ease pointer for smooth parallax
     mx += (tx - mx) * 0.05;
     my += (ty - my) * 0.05;
     orb.rotation.y = t * 0.12 + mx * 0.8;
@@ -206,17 +204,25 @@ function initHero3D() {
 // ============================================================
 function setAuthMode(mode) {
   const isSignup = mode === "signup";
+  showCodeStep(false);
   $("#auth-title").textContent = isSignup ? "Create your account" : "Welcome back";
   $("#auth-lead").textContent = isSignup
     ? "Start chatting with your documents in seconds."
     : "Log in to continue to your knowledge base.";
   $("#auth-submit").textContent = isSignup ? "Create account" : "Log in";
   $("#name-field").style.display = isSignup ? "" : "none";
+  $("#confirm-field").style.display = isSignup ? "" : "none";
   $("#auth-error").textContent = "";
   $("#auth-switch").innerHTML = isSignup
     ? `Already have an account? <a data-auth="login">Log in</a>`
     : `New to Peit? <a data-auth="signup">Create an account</a>`;
   $("#auth-form").dataset.mode = mode;
+  if (isSignup && !$("#auth-name").value.trim()) $("#auth-name").value = "Test";
+}
+
+function showCodeStep(on) {
+  $("#auth-step-main").hidden = !!on;
+  $("#auth-step-code").hidden = !on;
 }
 
 function openAuth(mode) {
@@ -231,17 +237,80 @@ function closeAuth() {
   if (m) m.hidden = true;
   const err = $("#auth-error");
   if (err) err.textContent = "";
+  showCodeStep(false);
+  state.pendingSignup = null;
 }
 
 function oauthClick(provider) {
   if (window.__oauthProviders && window.__oauthProviders[provider]) {
     location.href = `/api/auth/${provider}/login`; // real OAuth redirect
   } else {
-    // Provider not configured yet → demo login so the flow still completes.
     const demo = provider === "google"
       ? { name: "Google user", email: "you@gmail.com", provider: "demo" }
       : { name: "GitHub user", email: "you@users.noreply.github.com", provider: "demo" };
     loginUser(demo);
+  }
+}
+
+async function startSignup(name, email, password) {
+  const err = $("#auth-error");
+  $("#auth-submit").disabled = true;
+  $("#auth-submit").textContent = "Sending code…";
+  try {
+    const r = await fetch("/api/auth/signup/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || "Could not send a code. Try again.");
+    // Stash the details; the account is only created once the code is verified.
+    state.pendingSignup = { name, email, password, token: data.token };
+    $("#code-email").textContent = email;
+    const demo = $("#demo-code");
+    if (data.demo_code) {
+      demo.hidden = false;
+      demo.innerHTML = `Demo mode (no email server configured) — your code is <strong>${escapeHtml(data.demo_code)}</strong>`;
+    } else {
+      demo.hidden = true;
+    }
+    $("#auth-code").value = "";
+    $("#code-error").textContent = "";
+    showCodeStep(true);
+    setTimeout(() => $("#auth-code")?.focus(), 60);
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    $("#auth-submit").disabled = false;
+    $("#auth-submit").textContent = "Create account";
+  }
+}
+
+async function verifyCode() {
+  const p = state.pendingSignup;
+  const err = $("#code-error");
+  if (!p) { err.textContent = "Something went wrong. Start again."; return; }
+  const code = $("#auth-code").value.trim();
+  if (!/^\d{4,6}$/.test(code)) { err.textContent = "Enter the code from your email."; return; }
+  $("#code-submit").disabled = true;
+  $("#code-submit").textContent = "Verifying…";
+  try {
+    const r = await fetch("/api/auth/signup/verify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: p.token, code }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || "Incorrect code. Try again.");
+    // Persist a local account (so password login works later) and sign in.
+    const accounts = store.accounts();
+    accounts[p.email] = { name: p.name, pass: btoa(p.password) };
+    store.setAccounts(accounts);
+    state.pendingSignup = null;
+    loginUser({ name: p.name, email: p.email, provider: "email" });
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    $("#code-submit").disabled = false;
+    $("#code-submit").textContent = "Verify & continue";
   }
 }
 
@@ -252,6 +321,7 @@ function bindAuth() {
     const name = $("#auth-name").value.trim();
     const email = $("#auth-email").value.trim().toLowerCase();
     const password = $("#auth-password").value;
+    const confirm = $("#auth-confirm").value;
     const err = $("#auth-error");
     err.textContent = "";
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
@@ -259,35 +329,36 @@ function bindAuth() {
 
     const accounts = store.accounts();
     if (mode === "signup") {
+      if (password !== confirm) { err.textContent = "Passwords don't match."; return; }
       if (accounts[email]) { err.textContent = "An account with this email already exists. Try logging in."; return; }
-      accounts[email] = { name: name || email.split("@")[0], pass: btoa(password) };
-      store.setAccounts(accounts);
-      loginUser({ name: accounts[email].name, email });
+      startSignup(name || "Test", email, password);
     } else {
       const acc = accounts[email];
       if (!acc || acc.pass !== btoa(password)) { err.textContent = "Wrong email or password."; return; }
-      loginUser({ name: acc.name, email });
+      loginUser({ name: acc.name, email, provider: "email" });
     }
   });
 
-  // Social sign-in: real OAuth when the provider is configured on the backend,
-  // otherwise a demo login so the flow still completes.
+  $("#auth-step-code").addEventListener("submit", (e) => { e.preventDefault(); verifyCode(); });
+  $("#code-back").addEventListener("click", () => { showCodeStep(false); state.pendingSignup = null; });
+
   $("#oauth-google").addEventListener("click", () => oauthClick("google"));
   $("#oauth-github").addEventListener("click", () => oauthClick("github"));
 
-  // Close the popup: ✕ button, click on the backdrop, or Escape.
   $("#auth-close").addEventListener("click", closeAuth);
-  $("#auth-modal").addEventListener("click", (e) => {
-    if (e.target.id === "auth-modal") closeAuth();
-  });
+  $("#auth-modal").addEventListener("click", (e) => { if (e.target.id === "auth-modal") closeAuth(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !$("#auth-modal").hidden) closeAuth();
+    if (e.key !== "Escape") return;
+    if (!$("#auth-modal").hidden) closeAuth();
+    else if (!$("#account-modal").hidden) closeModal("account-modal");
+    else if (!$("#settings-modal").hidden) closeModal("settings-modal");
   });
 }
 
 function loginUser(user) {
   store.setUser(user);
   $("#auth-password").value = "";
+  $("#auth-confirm").value = "";
   state.currentConvoId = null;
   closeAuth();
   showView("view-app");
@@ -300,22 +371,21 @@ function loginUser(user) {
 function initApp() {
   const user = store.user();
   $("#user-email").textContent = user.email;
-  $("#user-avatar").textContent = initials(user.email);
+  $("#user-name").textContent = displayName(user);
+  $("#user-avatar").textContent = initials(displayName(user));
 
   if (!state.appBound) { bindApp(); state.appBound = true; }
 
   applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
   renderHistory();
-  refreshDocuments();
-  refreshHealth();
 
-  // open the most recent conversation, or start fresh
   const convos = store.convos(user.email);
   if (!state.currentConvoId) {
     if (convos.length) selectChat(convos[0].id);
     else newChat();
   } else {
     renderMessages();
+    renderAttachments();
   }
 }
 
@@ -324,12 +394,14 @@ function saveConvos(c) { store.setConvos(store.user().email, c); }
 
 function newChat() {
   const c = currentConvos();
-  const convo = { id: uid(), title: "New chat", messages: [], ts: Date.now() };
+  const convo = { id: uid(), title: "New chat", messages: [], docs: [], ts: Date.now() };
   c.unshift(convo);
   saveConvos(c);
   state.currentConvoId = convo.id;
   renderHistory();
   renderMessages();
+  renderAttachments();
+  closeSidebar();
   $("#question").focus();
 }
 
@@ -337,17 +409,23 @@ function selectChat(id) {
   state.currentConvoId = id;
   renderHistory();
   renderMessages();
+  renderAttachments();
+  closeSidebar();
 }
 
-function deleteChat(id) {
+async function deleteChat(id) {
+  const convo = currentConvos().find((x) => x.id === id);
+  // Best-effort: drop this chat's documents from the index (ephemeral on serverless).
+  (convo?.docs || []).forEach((d) => {
+    fetch(`/api/documents/${encodeURIComponent(d.source)}?collection=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  });
   let c = currentConvos().filter((x) => x.id !== id);
   saveConvos(c);
   if (state.currentConvoId === id) {
-    if (c.length) state.currentConvoId = c[0].id;
+    if (c.length) { selectChat(c[0].id); return; }
     else { newChat(); return; }
   }
   renderHistory();
-  renderMessages();
 }
 
 function getConvo() {
@@ -362,14 +440,15 @@ function renderHistory() {
   convos.forEach((c) => {
     const li = document.createElement("li");
     li.className = "history-item" + (c.id === state.currentConvoId ? " active" : "");
-    li.innerHTML = `<span class="hi-title">💬 ${escapeHtml(c.title)}</span><button class="hi-del" title="Delete">✕</button>`;
+    const dot = (c.docs && c.docs.length) ? `<span class="hi-doc" title="${c.docs.length} file(s)">📎</span>` : "";
+    li.innerHTML = `<span class="hi-title">${escapeHtml(c.title)}</span>${dot}<button class="hi-del" title="Delete">✕</button>`;
     li.querySelector(".hi-title").addEventListener("click", () => selectChat(c.id));
     li.querySelector(".hi-del").addEventListener("click", (e) => { e.stopPropagation(); deleteChat(c.id); });
     list.appendChild(li);
   });
 }
 
-const SUGGESTIONS = ["What is this document about?", "Summarize the key points.", "What are the best practices?"];
+const SUGGESTIONS = ["What is this document about?", "Summarize the key points.", "What are the main takeaways?"];
 
 function setChatTitle(convo) {
   const el = $("#chat-title");
@@ -382,11 +461,14 @@ function renderMessages() {
   setChatTitle(convo);
   box.innerHTML = "";
   if (!convo || !convo.messages.length) {
+    const hasDocs = convo && convo.docs && convo.docs.length;
     box.innerHTML = `
       <div class="app-empty">
-        <div class="ae-mark">P</div>
+        <div class="ae-mark">${MARK}</div>
         <h3>Ask anything about your documents</h3>
-        <p>Peit answers only from your indexed sources, and cites them inline.</p>
+        <p>${hasDocs
+          ? "Peit answers only from the files in this chat, and cites them inline."
+          : "Attach a PDF, TXT, or Markdown file to this chat, then ask away — answers are grounded and cited."}</p>
         <div class="app-suggestions">${SUGGESTIONS.map((s) => `<button class="chip">${s}</button>`).join("")}</div>
       </div>`;
     $$("#messages .chip").forEach((c) => (c.onclick = () => ask(c.textContent)));
@@ -395,7 +477,7 @@ function renderMessages() {
   convo.messages.forEach((m) => {
     const msg = document.createElement("div");
     msg.className = `msg ${m.role}`;
-    msg.innerHTML = `<div class="avatar">${m.role === "user" ? initials(store.user().email) : "P"}</div><div class="bubble"></div>`;
+    msg.innerHTML = `<div class="avatar">${m.role === "user" ? escapeHtml(initials(displayName(store.user()))) : MARK}</div><div class="bubble"></div>`;
     const bubble = msg.querySelector(".bubble");
     if (m.role === "user") bubble.textContent = m.content;
     else {
@@ -413,7 +495,7 @@ function addMessageEl(role, text) {
   box.querySelector(".app-empty")?.remove();
   const msg = document.createElement("div");
   msg.className = `msg ${role}`;
-  msg.innerHTML = `<div class="avatar">${role === "user" ? initials(store.user().email) : "P"}</div><div class="bubble"></div>`;
+  msg.innerHTML = `<div class="avatar">${role === "user" ? escapeHtml(initials(displayName(store.user()))) : MARK}</div><div class="bubble"></div>`;
   msg.querySelector(".bubble").textContent = text || "";
   box.appendChild(msg);
   box.scrollTop = box.scrollHeight;
@@ -465,7 +547,6 @@ async function ask(question) {
   let convo = getConvo();
   if (!convo) { newChat(); convo = getConvo(); }
 
-  // record + render user message
   convo.messages.push({ role: "user", content: question });
   if (convo.title === "New chat") convo.title = question.slice(0, 40);
   persist(convo);
@@ -482,7 +563,7 @@ async function ask(question) {
   try {
     const resp = await fetch("/api/query/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, collection: convo.id }),
     });
     if (!resp.ok || !resp.body) throw new Error("Request failed");
     const reader = resp.body.getReader();
@@ -516,10 +597,8 @@ async function ask(question) {
     renderCitations(msg, citations);
     if (answer && !answer.startsWith("⚠️")) addCopyButton(bubble, answer);
     $("#send-btn").disabled = false;
-    // save assistant message
     convo.messages.push({ role: "assistant", content: answer, citations });
     persist(convo);
-    refreshHealth();
   }
 }
 
@@ -527,49 +606,73 @@ function persist(convo) {
   const c = currentConvos();
   const i = c.findIndex((x) => x.id === convo.id);
   if (i >= 0) c[i] = convo;
-  // bump to top
-  c.sort((a, b) => (b.id === convo.id ? 1 : 0) - (a.id === convo.id ? 1 : 0));
   saveConvos(c);
 }
 
-// ---------- documents ----------
-async function refreshHealth() {
-  try {
-    const h = await (await fetch("/api/health")).json();
-    // (status is reflected implicitly; kept for future badges)
-    void h;
-  } catch {}
+// ---------- per-chat documents ----------
+function renderAttachments() {
+  const wrap = $("#attachments");
+  const convo = getConvo();
+  const docs = (convo && convo.docs) || [];
+  if (!docs.length) { wrap.hidden = true; wrap.innerHTML = ""; return; }
+  wrap.hidden = false;
+  wrap.innerHTML = docs.map((d) => `
+    <span class="chip-file" data-src="${escapeHtml(d.source)}">
+      <span class="cf-ic">📄</span>
+      <span class="cf-name" title="${escapeHtml(d.source)}">${escapeHtml(d.source)}</span>
+      <button class="cf-del" title="Remove from chat" aria-label="Remove">✕</button>
+    </span>`).join("");
+  $$(".chip-file .cf-del", wrap).forEach((b) => {
+    b.addEventListener("click", () => removeAttachment(b.closest(".chip-file").dataset.src));
+  });
 }
-async function refreshDocuments() {
-  try {
-    const data = await (await fetch("/api/documents")).json();
-    const list = $("#doc-list");
-    if (!data.documents.length) { list.innerHTML = `<li class="history-empty">No documents yet.</li>`; return; }
-    list.innerHTML = "";
-    data.documents.forEach((d) => {
-      const li = document.createElement("li");
-      li.innerHTML = `<span class="doc-name" title="${escapeHtml(d.source)}">📄 ${escapeHtml(d.source)}</span><span class="doc-count">${d.chunks}</span><button class="doc-del" title="Remove">✕</button>`;
-      li.querySelector(".doc-del").addEventListener("click", async () => {
-        await fetch(`/api/documents/${encodeURIComponent(d.source)}`, { method: "DELETE" });
-        refreshDocuments();
-      });
-      list.appendChild(li);
-    });
-  } catch {}
-}
-async function uploadFile(file) {
+
+function setUploadStatus(kind, text) {
   const s = $("#upload-status");
-  s.className = "upload-status"; s.textContent = `Uploading ${file.name}…`;
-  const form = new FormData(); form.append("file", file);
-  try {
-    const r = await fetch("/api/ingest", { method: "POST", body: form });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || "Upload failed");
-    s.className = "upload-status ok"; s.textContent = `✓ ${data.message}`;
-    refreshDocuments();
-  } catch (e) {
-    s.className = "upload-status err"; s.textContent = `✕ ${e.message}`;
+  if (!text) { s.hidden = true; s.textContent = ""; return; }
+  s.hidden = false;
+  s.className = "upload-status" + (kind ? " " + kind : "");
+  s.textContent = text;
+}
+
+async function uploadFiles(files) {
+  const convo = getConvo();
+  if (!convo) return;
+  const list = [...files];
+  for (const file of list) {
+    setUploadStatus("", `Uploading ${file.name}…`);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("collection", convo.id);
+    try {
+      const r = await fetch("/api/ingest", { method: "POST", body: form });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || "Upload failed");
+      // record on the convo (dedupe by filename)
+      convo.docs = (convo.docs || []).filter((d) => d.source !== data.source);
+      convo.docs.push({ source: data.source, chunks: data.chunks_added });
+      persist(convo);
+      renderAttachments();
+      renderHistory();
+      setUploadStatus("ok", `✓ Added ${data.source} to this chat`);
+    } catch (e) {
+      setUploadStatus("err", `✕ ${e.message}`);
+    }
   }
+  setTimeout(() => setUploadStatus("", ""), 2600);
+}
+
+async function removeAttachment(source) {
+  const convo = getConvo();
+  if (!convo) return;
+  try {
+    await fetch(`/api/documents/${encodeURIComponent(source)}?collection=${encodeURIComponent(convo.id)}`, { method: "DELETE" });
+  } catch {}
+  convo.docs = (convo.docs || []).filter((d) => d.source !== source);
+  persist(convo);
+  renderAttachments();
+  renderHistory();
+  if (!convo.messages.length) renderMessages();
 }
 
 // ---------- theme ----------
@@ -580,8 +683,63 @@ function effectiveTheme() {
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("peit_theme", theme);
-  const t = $("#theme-toggle"); if (t) t.textContent = theme === "dark" ? "☀️" : "🌙";
+  syncThemeUI(theme);
 }
+function syncThemeUI(theme) {
+  const dark = theme === "dark";
+  const ic = $("#menu-theme-ic"), label = $("#menu-theme-label");
+  if (ic) ic.textContent = dark ? "☀️" : "🌙";
+  if (label) label.textContent = dark ? "Light mode" : "Dark mode";
+  $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+// ---------- profile menu + modals ----------
+function toggleProfileMenu(force) {
+  const menu = $("#profile-menu");
+  const open = force !== undefined ? force : menu.hidden;
+  menu.hidden = !open;
+  $("#profile-btn").classList.toggle("open", open);
+}
+function openModal(id) { $("#" + id).hidden = false; }
+function closeModal(id) { $("#" + id).hidden = true; }
+
+function openAccount() {
+  const u = store.user();
+  $("#account-avatar").textContent = initials(displayName(u));
+  $("#account-name-h").textContent = displayName(u);
+  $("#account-email-h").textContent = u.email;
+  $("#account-name").value = u.name || displayName(u);
+  $("#account-email").value = u.email;
+  $("#account-saved").hidden = true;
+  openModal("account-modal");
+}
+
+function saveAccount(e) {
+  e.preventDefault();
+  const u = store.user();
+  const name = $("#account-name").value.trim() || displayName(u);
+  u.name = name;
+  store.setUser(u);
+  const accounts = store.accounts();
+  if (accounts[u.email]) { accounts[u.email].name = name; store.setAccounts(accounts); }
+  // reflect everywhere
+  $("#user-name").textContent = name;
+  $("#user-avatar").textContent = initials(name);
+  $("#account-avatar").textContent = initials(name);
+  $("#account-name-h").textContent = name;
+  renderMessages();
+  $("#account-saved").hidden = false;
+  setTimeout(() => ($("#account-saved").hidden = true), 1600);
+}
+
+function openSettings() {
+  $("#settings-model").textContent = window.__model || "Claude";
+  openModal("settings-modal");
+}
+
+// ---------- sidebar (mobile) ----------
+function openSidebar() { $("#app-sidebar").classList.add("open"); $("#sidebar-scrim").hidden = false; }
+function closeSidebar() { $("#app-sidebar")?.classList.remove("open"); const s = $("#sidebar-scrim"); if (s) s.hidden = true; }
 
 // ---------- app event bindings (once) ----------
 function bindApp() {
@@ -599,30 +757,56 @@ function bindApp() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
   $("#new-chat-btn").addEventListener("click", newChat);
-  $("#logout-btn").addEventListener("click", async () => {
+
+  // per-chat uploads
+  $("#attach-btn").addEventListener("click", () => $("#file-input").click());
+  $("#file-input").addEventListener("change", () => {
+    if ($("#file-input").files.length) uploadFiles($("#file-input").files);
+    $("#file-input").value = "";
+  });
+  // drag & drop onto the message area uploads into the current chat
+  const main = $(".app-main");
+  ["dragover", "dragenter"].forEach((ev) => main.addEventListener(ev, (e) => { e.preventDefault(); main.classList.add("dragging"); }));
+  ["dragleave", "drop"].forEach((ev) => main.addEventListener(ev, (e) => { e.preventDefault(); if (ev !== "dragover") main.classList.remove("dragging"); }));
+  main.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+
+  // profile menu
+  $("#profile-btn").addEventListener("click", (e) => { e.stopPropagation(); toggleProfileMenu(); });
+  $("#profile-btn").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleProfileMenu(); } });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#profile-menu") && !e.target.closest("#profile-btn")) toggleProfileMenu(false);
+  });
+  $("#menu-account").addEventListener("click", () => { toggleProfileMenu(false); openAccount(); });
+  $("#menu-settings").addEventListener("click", () => { toggleProfileMenu(false); openSettings(); });
+  $("#menu-theme").addEventListener("click", () => applyTheme(effectiveTheme() === "dark" ? "light" : "dark"));
+  $("#menu-logout").addEventListener("click", async () => {
     try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
     store.clearUser();
+    toggleProfileMenu(false);
     goHome();
   });
-  $("#theme-toggle").addEventListener("click", () => applyTheme(effectiveTheme() === "dark" ? "light" : "dark"));
 
-  // uploads
-  $("#file-input").addEventListener("change", () => { if ($("#file-input").files[0]) uploadFile($("#file-input").files[0]); $("#file-input").value = ""; });
-  const dz = $("#dropzone");
-  ["dragover", "dragenter"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("dragover"); }));
-  ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("dragover"); }));
-  dz.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
-  $("#clear-btn").addEventListener("click", async () => {
-    if (!confirm("Clear all indexed documents? (This affects the shared demo knowledge base.)")) return;
-    await fetch("/api/documents", { method: "DELETE" }); refreshDocuments();
+  // account modal
+  $("#account-close").addEventListener("click", () => closeModal("account-modal"));
+  $("#account-modal").addEventListener("click", (e) => { if (e.target.id === "account-modal") closeModal("account-modal"); });
+  $("#account-form").addEventListener("submit", saveAccount);
+
+  // settings modal
+  $("#settings-close").addEventListener("click", () => closeModal("settings-modal"));
+  $("#settings-modal").addEventListener("click", (e) => { if (e.target.id === "settings-modal") closeModal("settings-modal"); });
+  $$("#theme-seg button").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.theme)));
+  $("#clear-all-chats").addEventListener("click", () => {
+    if (!confirm("Delete every conversation on this device? This can't be undone.")) return;
+    saveConvos([]);
+    state.currentConvoId = null;
+    closeModal("settings-modal");
+    newChat();
   });
 
-  // mobile sidebar toggle
-  const menuBtn = document.createElement("button");
-  menuBtn.className = "btn btn-ghost btn-sm mobile-menu";
-  menuBtn.textContent = "☰";
-  menuBtn.onclick = () => $(".app-sidebar").classList.toggle("open");
-  document.body.appendChild(menuBtn);
+  // mobile sidebar
+  $("#mobile-menu").addEventListener("click", openSidebar);
+  $("#sidebar-close").addEventListener("click", closeSidebar);
+  $("#sidebar-scrim").addEventListener("click", closeSidebar);
 }
 
 // ============================================================
@@ -636,18 +820,24 @@ async function refreshProviders() {
   }
 }
 
+async function refreshHealth() {
+  try { const h = await (await fetch("/api/health")).json(); window.__model = h.model; } catch {}
+}
+
 async function refreshSession() {
   try {
     const r = await fetch("/api/auth/me");
     if (r.ok) {
       const me = await r.json();
       if (me && me.email) {
-        store.setUser({ name: me.name, email: me.email, provider: me.provider });
+        const existing = store.user();
+        // keep any locally-edited display name for the same account
+        const name = existing && existing.email === me.email && existing.name ? existing.name : me.name;
+        store.setUser({ name, email: me.email, provider: me.provider });
         return;
       }
     }
   } catch {}
-  // No valid server session — drop a stale real-OAuth user (demo/password users persist).
   const u = store.user();
   if (u && (u.provider === "google" || u.provider === "github")) store.clearUser();
 }
@@ -666,7 +856,7 @@ function handleAuthQuery() {
 async function boot() {
   applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
   bindAuth();
-  await Promise.all([refreshProviders(), refreshSession()]);
+  await Promise.all([refreshProviders(), refreshSession(), refreshHealth()]);
   if (store.user()) {
     showView("view-app");
     initApp();

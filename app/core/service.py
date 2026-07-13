@@ -36,8 +36,12 @@ class RAGService:
         self.llm = llm
 
     # --- ingestion -----------------------------------------------------------
-    def ingest(self, filename: str, data: bytes) -> int:
-        """Chunk, embed, and index a document. Returns the number of chunks added."""
+    def ingest(self, filename: str, data: bytes, collection: str = "") -> int:
+        """Chunk, embed, and index a document. Returns the number of chunks added.
+
+        ``collection`` scopes the document to a single chat, so uploads only affect
+        the conversation they were added to.
+        """
         text = extract_text(filename, data)
         chunks = chunk_text(
             text,
@@ -54,43 +58,59 @@ class RAGService:
                 text=chunk,
                 source=filename,
                 chunk_index=i,
+                collection=collection,
             )
             for i, chunk in enumerate(chunks)
         ]
-        # Re-ingesting the same filename replaces its previous chunks (no duplicates).
-        self.store.remove_document(filename)
+        # Re-ingesting the same filename in a chat replaces its previous chunks.
+        self.store.remove_document(filename, collection=collection)
         self.store.add(records, vectors)
         return len(records)
 
+    def documents(self, collection: str | None = None) -> dict[str, int]:
+        return self.store.documents(collection=collection)
+
+    def remove_document(self, source: str, collection: str | None = None) -> int:
+        return self.store.remove_document(source, collection=collection)
+
+    def remove_collection(self, collection: str) -> int:
+        return self.store.remove_collection(collection)
+
     # --- retrieval + generation ---------------------------------------------
-    def retrieve(self, question: str, top_k: int | None = None) -> list[SearchResult]:
+    def retrieve(
+        self, question: str, top_k: int | None = None, collection: str | None = None
+    ) -> list[SearchResult]:
         k = top_k or self.settings.top_k
         query_vec = self.embeddings.embed_query(question)
-        return self.store.search(query_vec, k)
+        return self.store.search(query_vec, k, collection=collection)
 
-    def query(self, question: str, top_k: int | None = None) -> tuple[str, list[Citation]]:
+    def query(
+        self, question: str, top_k: int | None = None, collection: str | None = None
+    ) -> tuple[str, list[Citation]]:
         """Non-streaming answer + citations."""
-        results = self.retrieve(question, top_k)
+        results = self.retrieve(question, top_k, collection=collection)
         citations = _to_citations(results)
         if not results:
             return (
-                "I don't have any indexed documents that address this question. "
-                "Upload a document first.",
+                "I don't have any documents in this chat that address your question. "
+                "Attach a PDF, TXT, or Markdown file to this chat first.",
                 citations,
             )
         prompt = _build_prompt(question, results)
         answer = self.llm.complete(SYSTEM_PROMPT, prompt)
         return answer, citations
 
-    def stream(self, question: str, top_k: int | None = None) -> tuple[Iterator[str], list[Citation]]:
+    def stream(
+        self, question: str, top_k: int | None = None, collection: str | None = None
+    ) -> tuple[Iterator[str], list[Citation]]:
         """Streaming answer generator + citations (citations resolved up front)."""
-        results = self.retrieve(question, top_k)
+        results = self.retrieve(question, top_k, collection=collection)
         citations = _to_citations(results)
         if not results:
             def _empty() -> Iterator[str]:
                 yield (
-                    "I don't have any indexed documents that address this question. "
-                    "Upload a document first."
+                    "I don't have any documents in this chat that address your question. "
+                    "Attach a PDF, TXT, or Markdown file to this chat first."
                 )
 
             return _empty(), citations

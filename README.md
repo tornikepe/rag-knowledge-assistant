@@ -38,10 +38,13 @@ is generated **only** from the retrieved passages and cites its sources inline.
   offline) behind clean interfaces; the vector store is equally swappable (Chroma /
   pgvector / Pinecone).
 - **Full product UI ("Peit")** — a from-scratch, framework-free single-page app: animated
-  marketing landing page, email/password sign-up & login, and a dashboard with saved
-  conversation history, knowledge-base management, light + dark theme, and a responsive
-  layout. *(Auth and history are client-side — see the note below — so the live demo needs
-  no database.)*
+  marketing landing page, sign-up with **email verification codes**, Google/GitHub OAuth,
+  and a dashboard with saved conversation history, **per-chat document uploads**, a profile
+  menu (manage account + settings), light + dark theme, and a fully responsive/mobile
+  layout. *(Password auth and history are client-side — see the note below — so the live
+  demo needs no database; email verification and OAuth are real backend flows.)*
+- **Per-chat retrieval** — documents are uploaded into a specific conversation and answers
+  are grounded only in that chat's files (the vector store is partitioned by collection).
 - **Fully tested & CI-ready** — the whole pipeline is exercised offline; `pytest` passes
   with no keys and no network.
 
@@ -177,8 +180,9 @@ To enable it:
 `GET /api/auth/providers` reports which providers are live. Auth routes: `/api/auth/{provider}/login`,
 `/api/auth/{provider}/callback`, `/api/auth/me`, `/api/auth/logout`.
 
-> Session identity is separate from RAG data — the shared demo index isn't yet partitioned
-> per user. Add per-user collections behind the `VectorStore` interface for true multi-tenancy.
+> The vector index is partitioned by **collection** (one per chat) behind the `VectorStore`
+> interface, so uploads only affect the conversation they were added to. Extending the same
+> mechanism to per-user scoping is a small change.
 
 ## 🔌 API
 
@@ -187,10 +191,10 @@ Interactive OpenAPI docs are served at **`/docs`**.
 | Method   | Endpoint             | Description                                    |
 | -------- | -------------------- | ---------------------------------------------- |
 | `GET`    | `/api/health`        | Status, providers, and index size              |
-| `POST`   | `/api/ingest`        | Upload & index a document (multipart)          |
-| `POST`   | `/api/query`         | Ask a question → answer + citations (JSON)     |
+| `POST`   | `/api/ingest`        | Upload & index a document (multipart; optional `collection`) |
+| `POST`   | `/api/query`         | Ask a question → answer + citations (JSON; optional `collection`) |
 | `POST`   | `/api/query/stream`  | Same, streamed as Server-Sent Events           |
-| `GET`    | `/api/documents`     | List indexed documents                         |
+| `GET`    | `/api/documents`     | List indexed documents (optional `?collection=`) |
 | `DELETE` | `/api/documents`     | Clear the index                                |
 
 ```bash
@@ -250,7 +254,8 @@ rag-knowledge-assistant/
 ## 🗺️ Roadmap
 
 - [ ] Hybrid search (BM25 + dense) and re-ranking
-- [ ] Per-collection / multi-tenant indexes
+- [x] Per-collection indexes (per-chat document scoping)
+- [ ] Per-user multi-tenant indexes + durable storage
 - [ ] Streaming citation highlights in the UI
 - [ ] Pluggable Chroma / pgvector backends behind the existing interface
 

@@ -56,6 +56,53 @@ def test_search_on_empty_store_returns_empty(tmp_path):
     assert store.search(np.zeros(8, dtype=np.float32), k=5) == []
 
 
+def test_collection_scoping_isolates_chats(tmp_path):
+    embedder = HashingEmbeddings(dim=64)
+    store = NumpyVectorStore(tmp_path / "index")
+
+    a = [Record(id="a0", text="the sky is blue", source="a.md", chunk_index=0, collection="chatA")]
+    b = [Record(id="b0", text="bananas are yellow", source="b.md", chunk_index=0, collection="chatB")]
+    store.add(a, embedder.embed_documents(["the sky is blue"]))
+    store.add(b, embedder.embed_documents(["bananas are yellow"]))
+
+    # documents() filters by collection
+    assert store.documents(collection="chatA") == {"a.md": 1}
+    assert store.documents(collection="chatB") == {"b.md": 1}
+    assert store.documents() == {"a.md": 1, "b.md": 1}
+
+    # search only returns the queried collection's chunks
+    res_a = store.search(embedder.embed_query("sky"), k=5, collection="chatA")
+    assert res_a and all(r.record.collection == "chatA" for r in res_a)
+    res_b = store.search(embedder.embed_query("sky"), k=5, collection="chatB")
+    assert res_b and all(r.record.collection == "chatB" for r in res_b)
+    # an empty collection yields nothing
+    assert store.search(embedder.embed_query("sky"), k=5, collection="chatC") == []
+
+
+def test_remove_document_and_collection_are_scoped(tmp_path):
+    embedder = HashingEmbeddings(dim=64)
+    store = NumpyVectorStore(tmp_path / "index")
+    # same filename in two chats — deletes must not cross collections
+    store.add(
+        [Record(id="a0", text="x", source="f.md", chunk_index=0, collection="chatA")],
+        embedder.embed_documents(["x"]),
+    )
+    store.add(
+        [Record(id="b0", text="y", source="f.md", chunk_index=0, collection="chatB")],
+        embedder.embed_documents(["y"]),
+    )
+    assert store.remove_document("f.md", collection="chatA") == 1
+    assert store.documents(collection="chatA") == {}
+    assert store.documents(collection="chatB") == {"f.md": 1}
+
+    store.add(
+        [Record(id="b1", text="z", source="g.md", chunk_index=0, collection="chatB")],
+        embedder.embed_documents(["z"]),
+    )
+    assert store.remove_collection("chatB") == 2
+    assert store.count() == 0
+
+
 def test_remove_document_deletes_only_that_source(tmp_path):
     embedder = HashingEmbeddings(dim=64)
     store = NumpyVectorStore(tmp_path / "index")

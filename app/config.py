@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     # --- Storage (the vector index is persisted here) ---
     storage_dir: Path = Path("/tmp/storage") if _ON_VERCEL else Path("storage")
 
-    # Seed the bundled sample document(s) at startup when the index is empty.
-    seed_sample_docs: bool = _ON_VERCEL
+    # Documents are scoped per chat (users upload into a specific conversation),
+    # so there is no shared global corpus to seed.
+    seed_sample_docs: bool = False
 
     # --- Chunking / retrieval ---
     chunk_size: int = 900          # target characters per chunk
@@ -72,6 +73,20 @@ class Settings(BaseSettings):
     # (must match the provider's registered redirect URI). Derived from the request
     # when unset.
     oauth_redirect_base: str | None = None
+
+    # --- Email (sign-up verification codes) ---
+    # When SMTP is configured the sign-up flow emails a 6-digit code; otherwise the
+    # code is returned to the client as a demo fallback so the flow still works.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None  # defaults to smtp_user when unset
+    smtp_starttls: bool = True
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
 
     @property
     def index_dir(self) -> Path:

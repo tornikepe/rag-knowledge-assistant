@@ -18,6 +18,9 @@ class HealthResponse(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
     top_k: int | None = Field(default=None, ge=1, le=20)
+    collection: str | None = Field(
+        default=None, max_length=128, description="Chat id to scope retrieval to"
+    )
 
 
 class Citation(BaseModel):
