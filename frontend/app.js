@@ -439,6 +439,7 @@ function initApp() {
   if (!state.appBound) { bindApp(); state.appBound = true; }
 
   applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
+  applySidebarCollapsed();
   renderHistory();
 
   const convos = store.convos(user.email);
@@ -503,11 +504,50 @@ function renderHistory() {
     const li = document.createElement("li");
     li.className = "history-item" + (c.id === state.currentConvoId ? " active" : "");
     const dot = (c.docs && c.docs.length) ? `<span class="hi-doc" title="${c.docs.length} file(s)">📎</span>` : "";
-    li.innerHTML = `<span class="hi-title">${escapeHtml(c.title)}</span>${dot}<button class="hi-del" title="Delete">✕</button>`;
+    li.innerHTML =
+      `<span class="hi-title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span>${dot}` +
+      `<span class="hi-actions">` +
+      `<button class="hi-btn hi-rename" title="Rename" aria-label="Rename chat">✎</button>` +
+      `<button class="hi-btn hi-del" title="Delete" aria-label="Delete chat">✕</button>` +
+      `</span>`;
     li.querySelector(".hi-title").addEventListener("click", () => selectChat(c.id));
+    li.querySelector(".hi-title").addEventListener("dblclick", (e) => { e.stopPropagation(); startRename(li, c); });
+    li.querySelector(".hi-rename").addEventListener("click", (e) => { e.stopPropagation(); startRename(li, c); });
     li.querySelector(".hi-del").addEventListener("click", (e) => { e.stopPropagation(); deleteChat(c.id); });
     list.appendChild(li);
   });
+}
+
+function startRename(li, convo) {
+  const titleEl = li.querySelector(".hi-title");
+  if (!titleEl) return;
+  li.classList.add("renaming");
+  const input = document.createElement("input");
+  input.className = "hi-edit";
+  input.maxLength = 60;
+  input.value = convo.title;
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = (save) => {
+    if (done) return;
+    done = true;
+    if (save) {
+      const v = input.value.trim();
+      const c = currentConvos();
+      const target = c.find((x) => x.id === convo.id);
+      if (target && v) { target.title = v.slice(0, 60); saveConvos(c); }
+    }
+    renderHistory();
+    if (state.currentConvoId === convo.id) setChatTitle(getConvo());
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(true); }
+    else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+  });
+  input.addEventListener("blur", () => commit(true));
+  input.addEventListener("click", (e) => e.stopPropagation());
 }
 
 const SUGGESTIONS = ["What is this document about?", "Summarize the key points.", "What are the main takeaways?"];
@@ -618,16 +658,22 @@ async function ask(question) {
 
   const msg = addMessageEl("assistant", "");
   const bubble = msg.querySelector(".bubble");
-  bubble.innerHTML = `<span class="typing"><span></span><span></span><span></span></span>`;
+  const hasDocs = (getConvo()?.docs || []).length > 0;
+  const setStatus = (label) => {
+    bubble.innerHTML =
+      `<span class="thinking"><span class="spinner"></span>` +
+      `<span class="thinking-label">${escapeHtml(label)}</span></span>`;
+  };
+  setStatus(hasDocs ? "Searching this chat’s files…" : "Thinking…");
 
   $("#send-btn").disabled = true;
-  let answer = "", citations = [], started = false;
+  let answer = "", citations = [], started = false, failed = false;
   try {
     const resp = await fetch("/api/query/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, collection: convo.id }),
     });
-    if (!resp.ok || !resp.body) throw new Error("Request failed");
+    if (!resp.ok || !resp.body) throw new Error("The server didn’t respond. Please try again.");
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -642,8 +688,12 @@ async function ask(question) {
         const data = block.match(/^data: (.+)$/m)?.[1];
         if (!type || !data) continue;
         const payload = JSON.parse(data);
-        if (type === "citations") citations = payload.citations;
-        else if (type === "token") {
+        if (type === "citations") {
+          citations = payload.citations;
+          setStatus(citations.length
+            ? `Reading ${citations.length} passage${citations.length > 1 ? "s" : ""} · writing…`
+            : "Writing…");
+        } else if (type === "token") {
           if (!started) { bubble.textContent = ""; started = true; }
           answer += payload.text;
           bubble.textContent = answer;
@@ -652,15 +702,22 @@ async function ask(question) {
         }
       }
     }
+    if (!started && !answer) answer = "I didn’t get a response. Please try again.";
   } catch (e) {
+    failed = true;
     answer = `⚠️ ${e.message}`;
   } finally {
-    bubble.innerHTML = renderMarkdown(answer);
+    if (failed) {
+      bubble.innerHTML = `<div class="msg-error">${escapeHtml(answer)}</div>`;
+    } else {
+      bubble.innerHTML = renderMarkdown(answer);
+      addCopyButton(bubble, answer);
+    }
     renderCitations(msg, citations);
-    if (answer && !answer.startsWith("⚠️")) addCopyButton(bubble, answer);
     $("#send-btn").disabled = false;
-    convo.messages.push({ role: "assistant", content: answer, citations });
-    persist(convo);
+    // Don't persist transient failures into the saved history.
+    if (!failed) { convo.messages.push({ role: "assistant", content: answer, citations }); persist(convo); }
+    $("#messages").scrollTop = $("#messages").scrollHeight;
   }
 }
 
@@ -798,9 +855,18 @@ function openSettings() {
   openModal("settings-modal");
 }
 
-// ---------- sidebar (mobile) ----------
+// ---------- sidebar (mobile drawer) ----------
 function openSidebar() { $("#app-sidebar").classList.add("open"); $("#sidebar-scrim").hidden = false; }
 function closeSidebar() { $("#app-sidebar")?.classList.remove("open"); const s = $("#sidebar-scrim"); if (s) s.hidden = true; }
+
+// ---------- sidebar (desktop collapse) ----------
+function setSidebarCollapsed(collapsed) {
+  $("#view-app").classList.toggle("collapsed", collapsed);
+  localStorage.setItem("peit_sidebar_collapsed", collapsed ? "1" : "0");
+}
+function applySidebarCollapsed() {
+  setSidebarCollapsed(localStorage.getItem("peit_sidebar_collapsed") === "1");
+}
 
 // ---------- app event bindings (once) ----------
 function bindApp() {
@@ -818,7 +884,10 @@ function bindApp() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
   $("#new-chat-btn").addEventListener("click", newChat);
-  $("#topbar-new-chat").addEventListener("click", newChat);
+
+  // collapse / expand the sidebar (desktop)
+  $("#sidebar-collapse").addEventListener("click", () => setSidebarCollapsed(true));
+  $("#sidebar-expand").addEventListener("click", () => setSidebarCollapsed(false));
 
   // per-chat uploads
   $("#attach-btn").addEventListener("click", () => $("#file-input").click());
