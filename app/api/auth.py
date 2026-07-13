@@ -113,11 +113,16 @@ def signup_start(body: SignupStartRequest):
     try:
         delivered = send_verification_email(s, email, name, code)
     except Exception as exc:  # noqa: BLE001 — surface the real reason (auth/timeout/etc.)
-        logging.getLogger("peit").warning(
-            "verification email failed (enabled=%s host=%s user_set=%s): %r",
-            s.email_enabled, s.smtp_host, bool(s.smtp_user), exc,
-        )
+        logging.getLogger("peit").warning("verification email failed: %r", exc)
         delivered = False
+    if not delivered:
+        # Diagnostic (booleans only, no secrets): distinguishes "env vars missing"
+        # (enabled=False) from an auth/connection error.
+        logging.getLogger("peit").info(
+            "email not delivered: enabled=%s host=%s port=%s user_set=%s pass_set=%s from_set=%s",
+            s.email_enabled, s.smtp_host, s.smtp_port, bool(s.smtp_user),
+            bool(s.smtp_password), bool(s.smtp_from),
+        )
 
     resp: dict = {"ok": True, "token": token, "delivered": delivered, "email": email}
     if not delivered:
