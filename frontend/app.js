@@ -77,30 +77,40 @@ function showView(id) {
   window.scrollTo(0, 0);
 }
 
-function router() {
-  const hash = location.hash || "#/";
-  const user = store.user();
+function goHome() {
+  closeAuth();
+  showView("view-landing");
+  updateNav();
+  initLanding();
+}
 
-  if (hash.startsWith("#/app")) {
-    if (!user) { location.hash = "#/login"; return; }
-    showView("view-app");
-    initApp();
-  } else if (hash === "#/login" || hash === "#/signup") {
-    setAuthMode(hash === "#/signup" ? "signup" : "login");
-    showView("view-auth");
+function goApp() {
+  if (!store.user()) { openAuth("login"); return; }
+  showView("view-app");
+  initApp();
+}
+
+// Landing nav reflects auth state (logged out → Log in / Get started; in → Open dashboard)
+function updateNav() {
+  const el = $("#nav-actions");
+  if (!el) return;
+  if (store.user()) {
+    el.innerHTML = `<button class="btn btn-primary btn-sm" id="nav-dash">Open dashboard</button>`;
+    $("#nav-dash").onclick = goApp;
   } else {
-    showView("view-landing");
-    initLanding();
-    // anchor scrolling within landing
-    if (hash.startsWith("#") && hash.length > 1 && !hash.startsWith("#/")) {
-      const el = document.getElementById(hash.slice(1));
-      if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth" }), 30);
-    }
+    el.innerHTML =
+      `<a class="nav-link" data-auth="login">Log in</a>` +
+      `<button class="btn btn-primary btn-sm" data-auth="signup">Get started</button>`;
   }
 }
-window.addEventListener("hashchange", router);
 
-// data-link anchors: let hash routing handle them naturally (no reload needed)
+// Clean-URL routing: clicks drive the views/modal directly, no hash in the address bar.
+document.addEventListener("click", (e) => {
+  const home = e.target.closest("[data-home]");
+  if (home) { e.preventDefault(); goHome(); return; }
+  const auth = e.target.closest("[data-auth]");
+  if (auth) { e.preventDefault(); openAuth(auth.dataset.auth); return; }
+});
 
 // ============================================================
 //  LANDING
@@ -205,9 +215,23 @@ function setAuthMode(mode) {
   $("#auth-aside-title").textContent = isSignup ? "Chat with your documents." : "Welcome back to Peit.";
   $("#auth-error").textContent = "";
   $("#auth-switch").innerHTML = isSignup
-    ? `Already have an account? <a data-goto="#/login">Log in</a>`
-    : `New to Peit? <a data-goto="#/signup">Create an account</a>`;
+    ? `Already have an account? <a data-auth="login">Log in</a>`
+    : `New to Peit? <a data-auth="signup">Create an account</a>`;
   $("#auth-form").dataset.mode = mode;
+}
+
+function openAuth(mode) {
+  setAuthMode(mode || "login");
+  const m = $("#auth-modal");
+  if (m) m.hidden = false;
+  setTimeout(() => $("#auth-email")?.focus(), 60);
+}
+
+function closeAuth() {
+  const m = $("#auth-modal");
+  if (m) m.hidden = true;
+  const err = $("#auth-error");
+  if (err) err.textContent = "";
 }
 
 function bindAuth() {
@@ -235,14 +259,22 @@ function bindAuth() {
     }
   });
 
-  $("#auth-demo").addEventListener("click", () =>
-    loginUser({ name: "Demo user", email: "demo@peit.app" })
+  // Social sign-in. Real OAuth needs a backend; for the zero-backend demo these
+  // sign you in as a provider-labelled account so the flow is complete.
+  $("#oauth-google").addEventListener("click", () =>
+    loginUser({ name: "Google user", email: "you@gmail.com", provider: "google" })
+  );
+  $("#oauth-github").addEventListener("click", () =>
+    loginUser({ name: "GitHub user", email: "you@users.noreply.github.com", provider: "github" })
   );
 
-  // switch login/signup links (delegated)
-  $("#view-auth").addEventListener("click", (e) => {
-    const a = e.target.closest("[data-goto]");
-    if (a) { e.preventDefault(); location.hash = a.dataset.goto; }
+  // Close the popup: ✕ button, click on the backdrop, or Escape.
+  $("#auth-close").addEventListener("click", closeAuth);
+  $("#auth-modal").addEventListener("click", (e) => {
+    if (e.target.id === "auth-modal") closeAuth();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("#auth-modal").hidden) closeAuth();
   });
 }
 
@@ -250,7 +282,9 @@ function loginUser(user) {
   store.setUser(user);
   $("#auth-password").value = "";
   state.currentConvoId = null;
-  location.hash = "#/app";
+  closeAuth();
+  showView("view-app");
+  initApp();
 }
 
 // ============================================================
@@ -558,7 +592,7 @@ function bindApp() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
   $("#new-chat-btn").addEventListener("click", newChat);
-  $("#logout-btn").addEventListener("click", () => { store.clearUser(); location.hash = "#/"; });
+  $("#logout-btn").addEventListener("click", () => { store.clearUser(); goHome(); });
   $("#theme-toggle").addEventListener("click", () => applyTheme(effectiveTheme() === "dark" ? "light" : "dark"));
 
   // uploads
@@ -585,4 +619,11 @@ function bindApp() {
 // ============================================================
 applyTheme(localStorage.getItem("peit_theme") || effectiveTheme());
 bindAuth();
-router();
+if (store.user()) {
+  showView("view-app");
+  initApp();
+} else {
+  showView("view-landing");
+  updateNav();
+  initLanding();
+}

@@ -142,6 +142,7 @@ a {
   font-weight: 800;
   font-size: 20px;
   letter-spacing: -0.02em;
+  cursor: pointer;
 }
 .logo-mark {
   display: grid;
@@ -166,6 +167,7 @@ a {
   font-size: 15px;
   font-weight: 500;
   transition: color 0.15s;
+  cursor: pointer;
 }
 .nav-link:hover {
   color: var(--text);
@@ -1106,4 +1108,103 @@ a {
   top: 14px;
   left: 14px;
   z-index: 65;
+}
+
+/* ============================================================
+   AUTH POPUP (centered, blurred backdrop)
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 10, 20, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: overlayIn 0.2s ease;
+}
+:root[data-theme="light"] .modal-overlay {
+  background: rgba(20, 32, 58, 0.25);
+}
+.modal-overlay[hidden] {
+  display: none;
+}
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 410px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 30px;
+  box-shadow: var(--shadow);
+  animation: modalIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.modal-close:hover {
+  color: var(--text);
+  border-color: var(--brand);
+}
+.modal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+.modal-title {
+  font-size: 23px;
+  letter-spacing: -0.02em;
+  margin: 0 0 5px;
+}
+.modal-sub {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0 0 22px;
+}
+.oauth-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn-oauth {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 600;
+  padding: 12px 16px;
+}
+.btn-oauth:hover {
+  border-color: var(--brand);
+  background: var(--grad-soft);
+  transform: translateY(-1px);
+}
+.modal-card .field input {
+  background: var(--panel-2);
+}
+.modal-card .auth-divider span {
+  background: var(--panel);
 }
