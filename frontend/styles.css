@@ -260,6 +260,7 @@ a {
   height: 100%;
   display: block;
   pointer-events: none;
+  opacity: 0.5; /* keep the orb a subtle background accent so hero text stays legible */
 }
 
 /* vignette to frame the scene */

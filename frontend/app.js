@@ -131,7 +131,7 @@ function initHero3D() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.z = 5.2;
+  camera.position.z = 8.5; // further back → the orb reads as a smaller background accent
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
@@ -212,7 +212,6 @@ function setAuthMode(mode) {
     : "Log in to continue to your knowledge base.";
   $("#auth-submit").textContent = isSignup ? "Create account" : "Log in";
   $("#name-field").style.display = isSignup ? "" : "none";
-  $("#auth-aside-title").textContent = isSignup ? "Chat with your documents." : "Welcome back to Peit.";
   $("#auth-error").textContent = "";
   $("#auth-switch").innerHTML = isSignup
     ? `Already have an account? <a data-auth="login">Log in</a>`
