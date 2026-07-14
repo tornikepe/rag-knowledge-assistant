@@ -134,6 +134,15 @@ ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-opus-4-8
 ```
 
+The LLM is the part that "talks": set **`LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`**
+to get real Claude-generated answers (leave them unset to run the offline `echo`
+answerer). The OpenAI embeddings above are optional — they improve retrieval, but
+`hash` mode works with no key.
+
+> **On Vercel** (or any host), set these as **Environment Variables** in the project
+> settings instead of a `.env` file, then redeploy — env-var changes only take effect
+> on the next deployment. The same applies to the OAuth and SMTP variables below.
+
 ## ⚙️ Configuration
 
 | Variable             | Default              | Description                                            |
