@@ -9,6 +9,9 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const MARK = '<svg class="mark-ic" aria-hidden="true"><use href="#peit-mark" /></svg>';
+const ICON_MOON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICON_CLIP = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.19 5.19l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.49"/></svg>';
 
 // ---------- storage ----------
 const store = {
@@ -144,16 +147,16 @@ function initHero3D() {
   const orb = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({
-      color: 0x2f6bff, metalness: 0.45, roughness: 0.28,
-      emissive: 0x0b1c4a, emissiveIntensity: 0.55,
+      color: 0x6366f1, metalness: 0.45, roughness: 0.28,
+      emissive: 0x140f3a, emissiveIntensity: 0.55,
     })
   );
   scene.add(orb);
 
   scene.add(new THREE.AmbientLight(0x24304f, 0.7));
   const L = [
-    [0x3b82f6, 2.6, [-4, 3, 4]],
-    [0x22d3ee, 2.3, [4, -3, 3]],
+    [0x6366f1, 2.6, [-4, 3, 4]],
+    [0xa78bfa, 2.3, [4, -3, 3]],
     [0x8b5cf6, 1.3, [0, 4, -4]],
     [0xffffff, 0.8, [0, 0, 6]],
   ];
@@ -503,7 +506,7 @@ function renderHistory() {
   convos.forEach((c) => {
     const li = document.createElement("li");
     li.className = "history-item" + (c.id === state.currentConvoId ? " active" : "");
-    const dot = (c.docs && c.docs.length) ? `<span class="hi-doc" title="${c.docs.length} file(s)">📎</span>` : "";
+    const dot = (c.docs && c.docs.length) ? `<span class="hi-doc" title="${c.docs.length} file(s)">${ICON_CLIP}</span>` : "";
     li.innerHTML =
       `<span class="hi-title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span>${dot}` +
       `<span class="hi-actions">` +
@@ -807,7 +810,7 @@ function applyTheme(theme) {
 function syncThemeUI(theme) {
   const dark = theme === "dark";
   const ic = $("#menu-theme-ic"), label = $("#menu-theme-label");
-  if (ic) ic.textContent = dark ? "☀️" : "🌙";
+  if (ic) ic.innerHTML = dark ? ICON_SUN : ICON_MOON;
   if (label) label.textContent = dark ? "Light mode" : "Dark mode";
   $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
 }
