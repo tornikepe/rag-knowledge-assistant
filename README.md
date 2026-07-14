@@ -38,11 +38,12 @@ is generated **only** from the retrieved passages and cites its sources inline.
   offline) behind clean interfaces; the vector store is equally swappable (Chroma /
   pgvector / Pinecone).
 - **Full product UI ("Peit")** — a from-scratch, framework-free single-page app: animated
-  marketing landing page, sign-up with **email verification codes**, Google/GitHub OAuth,
-  and a dashboard with saved conversation history, **per-chat document uploads**, a profile
-  menu (manage account + settings), light + dark theme, and a fully responsive/mobile
-  layout. *(Password auth and history are client-side — see the note below — so the live
-  demo needs no database; email verification and OAuth are real backend flows.)*
+  marketing landing page, sign-up with **email verification codes** (+ **password reset**),
+  Google/GitHub OAuth, and a dashboard with saved conversation history, **per-chat document
+  uploads**, chat rename, a collapsible sidebar, a profile menu (manage account + settings),
+  light + dark theme, and a fully responsive/mobile layout. *(Password auth and history are
+  client-side — see the note below — so the live demo needs no database; email verification
+  and OAuth are real backend flows.)*
 - **Per-chat retrieval** — documents are uploaded into a specific conversation and answers
   are grounded only in that chat's files (the vector store is partitioned by collection).
 - **Fully tested & CI-ready** — the whole pipeline is exercised offline; `pytest` passes
@@ -192,6 +193,32 @@ To enable it:
 > The vector index is partitioned by **collection** (one per chat) behind the `VectorStore`
 > interface, so uploads only affect the conversation they were added to. Extending the same
 > mechanism to per-user scoping is a small change.
+
+## 📧 Email sign-up verification (optional SMTP)
+
+Sign-up emails a **6-digit code** to the address being registered, and the same flow powers
+**"Forgot password?"** on the login screen. Configure SMTP to turn it on; without it, email
+sign-up and reset are disabled and users sign in with Google/GitHub instead.
+
+Set these (in `.env` locally, or the Vercel project settings — then redeploy):
+
+```ini
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com          # the full address that sends the mail (required)
+SMTP_PASSWORD=your-app-password  # see the Gmail note below
+SMTP_FROM=you@gmail.com          # optional; defaults to SMTP_USER
+SMTP_STARTTLS=true
+```
+
+> **Gmail:** use an **App Password**, not your account password. Turn on 2-Step Verification,
+> create one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords),
+> and paste the 16 characters **without spaces**. All three of `SMTP_HOST`, `SMTP_USER`, and
+> `SMTP_PASSWORD` must be set. (Vercel's serverless functions *can* send over SMTP — the port
+> isn't blocked.)
+
+The code is carried in a short-lived HMAC-signed token, so no database is needed. Endpoints:
+`POST /api/auth/signup/start`, `POST /api/auth/signup/verify`.
 
 ## 🔌 API
 
