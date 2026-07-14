@@ -10,11 +10,14 @@ citation-bearing answer. Two providers implement one interface:
 
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are Peit, a sharp and friendly knowledge assistant. Answer the user's question "
@@ -97,20 +100,32 @@ class AnthropicLLM(LLMProvider):
 
 
 def build_llm_provider(settings: Settings) -> LLMProvider:
-    """Factory: choose an LLM provider from settings."""
+    """Factory: choose an LLM provider from settings.
+
+    A misconfigured provider must never take the whole app down: this runs at
+    import time on serverless (see ``app.main``), so raising here would 500 every
+    route — including the landing page and offline ``echo`` mode. When Anthropic is
+    requested but no key is present, we log a warning and fall back to ``EchoLLM``
+    so the site stays up; set ``ANTHROPIC_API_KEY`` to restore Claude answers.
+    """
     provider = settings.llm_provider.lower()
     if provider == "anthropic":
         if not settings.anthropic_api_key:
-            raise ValueError(
-                "LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY. "
-                "Set it in .env, or use LLM_PROVIDER=echo for offline mode."
+            logger.warning(
+                "LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set — falling "
+                "back to offline 'echo' answers. Set ANTHROPIC_API_KEY to enable Claude."
             )
+            return EchoLLM()
         return AnthropicLLM(
             settings.anthropic_api_key, settings.anthropic_model, settings.max_tokens
         )
     if provider == "echo":
         return EchoLLM()
-    raise ValueError(f"Unknown LLM_PROVIDER: {settings.llm_provider!r}")
+    logger.warning(
+        "Unknown LLM_PROVIDER=%r — falling back to offline 'echo' answers.",
+        settings.llm_provider,
+    )
+    return EchoLLM()
 
 
 # --- helpers for the offline EchoLLM ---------------------------------------
