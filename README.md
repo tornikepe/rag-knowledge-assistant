@@ -18,6 +18,10 @@ is generated **only** from the retrieved passages and cites its sources inline.
 ![Claude](https://img.shields.io/badge/LLM-Claude-d97757)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+<br />
+
+<img src="docs/dashboard.png" alt="Peit dashboard — a grounded answer with inline [n] citations and a sources panel" width="880" />
+
 </div>
 
 ---
@@ -54,13 +58,14 @@ is generated **only** from the retrieved passages and cites its sources inline.
 > real backend. For production, swap in a real auth provider (e.g. Clerk/Auth.js) and a
 > database (e.g. Postgres/Neon) — the frontend is structured so this is a drop-in change.
 
-## 🖼️ Demo
+## 🖼️ Screenshots
 
-<!-- Record a short clip (upload a doc → ask a question → see the cited streamed answer)
-     and drop it in as docs/demo.gif, then this image will render on the repo home page. -->
 <div align="center">
-  <img src="docs/demo.gif" alt="RAG Knowledge Assistant demo" width="720" />
-  <br /><em>Upload a document, ask a question, get a streamed answer with sources.</em>
+  <img src="docs/landing.png" alt="Peit landing page with an animated 3D hero" width="430" />
+  &nbsp;
+  <img src="docs/dashboard-light.png" alt="Peit dashboard in light mode" width="430" />
+  <br />
+  <em>Animated landing page · the dashboard in light and dark themes.</em>
 </div>
 
 ## 🏗️ Architecture
