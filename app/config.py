@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Gemini "thinking" budget: 0 disables it (fast + cheap — ideal for grounded RAG
     # answers on flash models), -1 lets the model decide. Only used by the gemini LLM.
     gemini_thinking_budget: int = 0
+    # Retries for transient Gemini errors (503 overloaded / 429 rate-limited / 500),
+    # with exponential backoff. Keeps the free tier resilient. Used by both LLM + embeddings.
+    gemini_max_retries: int = 3
     anthropic_model: str = "claude-opus-4-8"
     max_tokens: int = 1024
 

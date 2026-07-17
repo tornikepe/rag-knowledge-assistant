@@ -92,6 +92,71 @@ def test_build_llm_provider_gemini_with_key(fake_genai):
     assert isinstance(build_llm_provider(settings), GeminiLLM)
 
 
+def _api_error(code: int):
+    """Build a google-genai APIError with a status code, bypassing its net-y __init__."""
+    from google.genai import errors
+    err = errors.APIError.__new__(errors.APIError)
+    err.code = code
+    err.message = f"status {code}"
+    return err
+
+
+def test_gemini_llm_retries_transient_error_then_succeeds(fake_genai, monkeypatch):
+    import app.core.llm as llm_mod
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda *_a, **_k: None)  # no real backoff
+
+    llm = GeminiLLM("k", max_retries=2)
+    calls = {"n": 0}
+    def flaky(*, model, contents, config):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise _api_error(503)  # transient: overloaded
+        yield _FakeChunk("Hi")
+        yield _FakeChunk(" there")
+    llm._client.models.generate_content_stream = flaky
+
+    assert llm.complete("S", "U") == "Hi there"
+    assert calls["n"] == 2  # retried once, then succeeded
+
+
+def test_gemini_llm_does_not_retry_client_error(fake_genai, monkeypatch):
+    from google.genai import errors
+
+    import app.core.llm as llm_mod
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda *_a, **_k: None)
+
+    llm = GeminiLLM("k", max_retries=3)
+    calls = {"n": 0}
+    def always_fail(*, model, contents, config):
+        calls["n"] += 1
+        raise _api_error(400)  # client error (e.g. bad request): must NOT retry
+        yield  # pragma: no cover - makes this a generator
+    llm._client.models.generate_content_stream = always_fail
+
+    with pytest.raises(errors.APIError):
+        llm.complete("S", "U")
+    assert calls["n"] == 1  # no retries on 4xx
+
+
+def test_gemini_embeddings_retry_transient_then_succeeds(fake_genai, monkeypatch):
+    import app.core.embeddings as emb_mod
+    monkeypatch.setattr(emb_mod.time, "sleep", lambda *_a, **_k: None)
+
+    emb = GeminiEmbeddings("k", dim=3, max_retries=2)
+    calls = {"n": 0}
+    real_embed = emb._client.models.embed_content
+    def flaky(*, model, contents, config):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise _api_error(429)  # rate-limited
+        return real_embed(model=model, contents=contents, config=config)
+    emb._client.models.embed_content = flaky
+
+    out = emb.embed_documents(["aa", "bb"])
+    assert out.shape == (2, 3)
+    assert calls["n"] == 2
+
+
 # --- embeddings --------------------------------------------------------------
 def test_gemini_embeddings_task_types_and_normalization(fake_genai):
     emb = GeminiEmbeddings("test-key", model="gemini-embedding-001", dim=3)

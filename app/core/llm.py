@@ -14,12 +14,17 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+
+# Gemini's free tier intermittently returns these transient statuses under load;
+# they're safe to retry with backoff (unlike 4xx client errors like a bad key).
+_GEMINI_RETRYABLE_STATUS = frozenset({429, 500, 503})
 
 SYSTEM_PROMPT = (
     "You are Peit, a sharp and friendly knowledge assistant. Answer the user's question "
@@ -94,17 +99,20 @@ class GeminiLLM(LLMProvider):
         model: str = "gemini-flash-latest",
         max_tokens: int = 1024,
         thinking_budget: int | None = 0,
+        max_retries: int = 3,
     ) -> None:
         from google import genai  # lazy import so other modes need no google-genai dep
-        from google.genai import types
+        from google.genai import errors, types
 
         self._types = types
+        self._errors = errors
         self._client = genai.Client(api_key=api_key)
         self.model = model
         self.max_tokens = max_tokens
         self.thinking_budget = thinking_budget
+        self.max_retries = max_retries
 
-    def stream(self, system: str, user: str) -> Iterator[str]:
+    def _build_config(self, system: str):
         types = self._types
         config_kwargs: dict = {
             "system_instruction": system,
@@ -119,12 +127,36 @@ class GeminiLLM(LLMProvider):
             config_kwargs["thinking_config"] = thinking_config(
                 thinking_budget=self.thinking_budget
             )
-        config = types.GenerateContentConfig(**config_kwargs)
-        for chunk in self._client.models.generate_content_stream(
-            model=self.model, contents=user, config=config
-        ):
-            if chunk.text:
-                yield chunk.text
+        return types.GenerateContentConfig(**config_kwargs)
+
+    def stream(self, system: str, user: str) -> Iterator[str]:
+        config = self._build_config(system)
+        for attempt in range(self.max_retries + 1):
+            produced = False
+            try:
+                for chunk in self._client.models.generate_content_stream(
+                    model=self.model, contents=user, config=config
+                ):
+                    if chunk.text:
+                        produced = True
+                        yield chunk.text
+                return
+            except self._errors.APIError as exc:
+                # Only retry transient errors, and only before any text was emitted
+                # (retrying mid-stream would duplicate the answer). 503s on the free
+                # tier are common and usually clear on the next attempt.
+                status = getattr(exc, "code", None)
+                if (
+                    produced
+                    or status not in _GEMINI_RETRYABLE_STATUS
+                    or attempt == self.max_retries
+                ):
+                    raise
+                logger.warning(
+                    "Gemini generation returned %s (attempt %d/%d) — retrying.",
+                    status, attempt + 1, self.max_retries,
+                )
+                time.sleep(0.6 * (2 ** attempt))
 
 
 class AnthropicLLM(LLMProvider):
@@ -176,6 +208,7 @@ def build_llm_provider(settings: Settings) -> LLMProvider:
             settings.gemini_model,
             settings.max_tokens,
             settings.gemini_thinking_budget,
+            settings.gemini_max_retries,
         )
     if provider == "anthropic":
         if not settings.anthropic_api_key:

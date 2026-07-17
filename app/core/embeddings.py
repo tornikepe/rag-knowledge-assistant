@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -23,6 +24,9 @@ import numpy as np
 from app.config import Settings
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+# Transient Gemini statuses (overloaded / rate-limited / internal) worth retrying.
+_GEMINI_RETRYABLE_STATUS = frozenset({429, 500, 503})
 
 
 class EmbeddingProvider(ABC):
@@ -83,15 +87,38 @@ class GeminiEmbeddings(EmbeddingProvider):
         model: str = "gemini-embedding-001",
         dim: int = 768,
         batch_size: int = 100,
+        max_retries: int = 3,
     ) -> None:
         from google import genai  # lazy import so `hash` mode needs no google-genai dep
-        from google.genai import types
+        from google.genai import errors, types
 
         self._types = types
+        self._errors = errors
         self._client = genai.Client(api_key=api_key)
         self.model = model
         self.dim = dim
         self.batch_size = batch_size
+        self.max_retries = max_retries
+
+    def _embed_batch(self, batch: list[str], task_type: str) -> list[list[float]]:
+        """Embed one batch, retrying transient Gemini errors with backoff."""
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = self._client.models.embed_content(
+                    model=self.model,
+                    contents=batch,
+                    config=self._types.EmbedContentConfig(
+                        task_type=task_type,
+                        output_dimensionality=self.dim,
+                    ),
+                )
+                return [e.values for e in resp.embeddings]
+            except self._errors.APIError as exc:
+                status = getattr(exc, "code", None)
+                if status not in _GEMINI_RETRYABLE_STATUS or attempt == self.max_retries:
+                    raise
+                time.sleep(0.6 * (2 ** attempt))
+        return []  # unreachable; the loop returns or raises
 
     def _embed(self, texts: list[str], task_type: str) -> np.ndarray:
         if not texts:
@@ -99,16 +126,7 @@ class GeminiEmbeddings(EmbeddingProvider):
         vectors: list[list[float]] = []
         # Gemini accepts batches; 100 stays within the embedding request limit.
         for start in range(0, len(texts), self.batch_size):
-            batch = texts[start : start + self.batch_size]
-            resp = self._client.models.embed_content(
-                model=self.model,
-                contents=batch,
-                config=self._types.EmbedContentConfig(
-                    task_type=task_type,
-                    output_dimensionality=self.dim,
-                ),
-            )
-            vectors.extend(e.values for e in resp.embeddings)
+            vectors.extend(self._embed_batch(texts[start : start + self.batch_size], task_type))
         # A truncated output dimension (dim < the model's native size) needs
         # re-normalizing for cosine similarity — which is what _l2_normalize does.
         return _l2_normalize(np.array(vectors, dtype=np.float32))
@@ -168,6 +186,7 @@ def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
             settings.gemini_api_key,
             settings.gemini_embedding_model,
             settings.gemini_embedding_dim,
+            max_retries=settings.gemini_max_retries,
         )
     if provider == "openai":
         if not settings.openai_api_key:
