@@ -8,7 +8,7 @@
       name="description"
       content="Peit is an AI knowledge assistant. Upload your documents and get instant, grounded answers with citations."
     />
-    <link rel="stylesheet" href="/styles.css?v=14" />
+    <link rel="stylesheet" href="/styles.css?v=15" />
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='9'%20fill='%236366f1'/%3E%3Cpath%20d='M11%2024%20L11%208%20L16%208%20A5%205%200%200%201%2016%2018%20L11%2018'%20fill='none'%20stroke='white'%20stroke-width='3'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3Ccircle%20cx='21'%20cy='22'%20r='1.9'%20fill='%23c7d2fe'/%3E%3C/svg%3E"
@@ -44,6 +44,7 @@
         <span class="blob b2"></span>
         <span class="blob b3"></span>
       </div>
+      <div id="vanta-bg" aria-hidden="true"></div>
       <canvas id="hero-canvas" aria-hidden="true"></canvas>
 
       <nav class="nav-min">
@@ -297,6 +298,8 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="/app.js?v=14"></script>
+    <!-- Vanta.js rides on the three.js already loaded above → animated background. -->
+    <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.net.min.js"></script>
+    <script src="/app.js?v=15"></script>
   </body>
 </html>

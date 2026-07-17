@@ -260,6 +260,21 @@ a {
   opacity: 0.28;
 }
 
+/* Animated network background (Vanta.js) — a moving layer above the aurora glow
+   but below the hero orb. Transparent WebGL background lets the aurora show through. */
+#vanta-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none; /* purely ambient — never intercept clicks */
+}
+#vanta-bg canvas {
+  opacity: 0.9;
+}
+:root[data-theme="light"] #vanta-bg canvas {
+  opacity: 0.7;
+}
+
 /* Interactive 3D hero orb (Three.js) sits above the aurora */
 #hero-canvas {
   position: absolute;

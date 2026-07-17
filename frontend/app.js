@@ -81,6 +81,9 @@ function renderMarkdown(src) {
 function showView(id) {
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === id));
   document.body.classList.toggle("in-app", id === "view-app");
+  // Stop the background animation when it's off-screen so it costs no GPU in the app;
+  // initLanding() re-creates it when the user returns to the landing view.
+  if (id !== "view-landing") destroyVantaBg();
   closeSidebar();
   window.scrollTo(0, 0);
 }
@@ -126,6 +129,44 @@ document.addEventListener("click", (e) => {
 function initLanding() {
   // Never let the optional 3D hero break navigation — the CSS aurora is the fallback.
   try { initHero3D(); } catch (_e) { /* WebGL/library unavailable → aurora only */ }
+  try { initVantaBg(); } catch (_e) { /* Vanta/library unavailable → aurora only */ }
+}
+
+// ---- Ambient animated background (Vanta.js NET) --------------------------------
+// A slowly drifting network of nodes — a fitting motif for a retrieval/knowledge
+// product. It rides on the three.js already loaded for the hero orb. To try another
+// look, swap VANTA.NET below for VANTA.WAVES / VANTA.GLOBE / VANTA.FOG / VANTA.DOTS.
+let vantaBg = null;
+function bgColorForTheme() {
+  // Indigo lines; a touch deeper in light mode so they read on a pale background.
+  return effectiveTheme() === "light" ? 0x4f46e5 : 0x6366f1;
+}
+function initVantaBg() {
+  if (vantaBg) return;
+  const el = document.getElementById("vanta-bg");
+  if (!el || typeof VANTA === "undefined" || !VANTA.NET || typeof THREE === "undefined") return;
+  // Respect users who prefer reduced motion — keep the static aurora instead.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  vantaBg = VANTA.NET({
+    el,
+    THREE: window.THREE,
+    mouseControls: false,
+    touchControls: false,
+    gyroControls: false,
+    minHeight: 200.0,
+    minWidth: 200.0,
+    scale: 1.0,
+    scaleMobile: 1.0,
+    backgroundAlpha: 0.0, // transparent → the aurora glow shows through
+    color: bgColorForTheme(),
+    points: window.innerWidth < 700 ? 6.0 : 11.0,
+    maxDistance: 22.0,
+    spacing: 17.0,
+    showDots: true,
+  });
+}
+function destroyVantaBg() {
+  if (vantaBg) { try { vantaBg.destroy(); } catch (_e) { /* ignore */ } vantaBg = null; }
 }
 
 // Interactive 3D hero: a glossy icosphere that "breathes" and follows the pointer.
@@ -806,6 +847,10 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("peit_theme", theme);
   syncThemeUI(theme);
+  // Keep the animated background legible against the new theme.
+  if (vantaBg && vantaBg.setOptions) {
+    try { vantaBg.setOptions({ color: bgColorForTheme() }); } catch (_e) { /* ignore */ }
+  }
 }
 function syncThemeUI(theme) {
   const dark = theme === "dark";
