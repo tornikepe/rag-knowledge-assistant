@@ -46,20 +46,31 @@ class Settings(BaseSettings):
     max_upload_mb: int = 20
 
     # --- Embeddings ---
+    # "gemini"  -> Google Gemini embeddings  (needs GEMINI_API_KEY; free tier)
     # "openai"  -> OpenAI text-embedding-3-small  (needs OPENAI_API_KEY)
     # "hash"    -> deterministic offline embeddings (no key; for demos / CI)
     embedding_provider: str = "hash"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 256       # only used by the "hash" provider
+    gemini_embedding_model: str = "gemini-embedding-001"  # used by the "gemini" provider
+    gemini_embedding_dim: int = 768        # Gemini output dimensionality (128–3072)
+    embedding_model: str = "text-embedding-3-small"  # used by the "openai" provider
+    embedding_dim: int = 256               # only used by the "hash" provider
     openai_api_key: str | None = None
 
     # --- LLM (answer generation) ---
+    # "gemini"    -> Gemini via the google-genai SDK (needs GEMINI_API_KEY; free tier)
     # "anthropic" -> Claude via the Anthropic SDK (needs ANTHROPIC_API_KEY)
     # "echo"      -> deterministic offline answer (no key; for demos / CI)
     llm_provider: str = "echo"
-    anthropic_api_key: str | None = None
+    gemini_model: str = "gemini-flash-latest"
+    # Gemini "thinking" budget: 0 disables it (fast + cheap — ideal for grounded RAG
+    # answers on flash models), -1 lets the model decide. Only used by the gemini LLM.
+    gemini_thinking_budget: int = 0
     anthropic_model: str = "claude-opus-4-8"
     max_tokens: int = 1024
+
+    # A single free Gemini key powers both the LLM and the embeddings above.
+    gemini_api_key: str | None = None
+    anthropic_api_key: str | None = None
 
     # --- OAuth (real Google / GitHub sign-in) ---
     # Enabled per-provider only when both id + secret are set; otherwise the UI

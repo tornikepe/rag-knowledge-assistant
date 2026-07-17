@@ -15,7 +15,7 @@ is generated **only** from the retrieved passages and cites its sources inline.
 [![CI](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/tornikepe/rag-knowledge-assistant/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)
-![Claude](https://img.shields.io/badge/LLM-Claude-d97757)
+![Gemini](https://img.shields.io/badge/LLM-Gemini-4285F4)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 <br />
@@ -28,8 +28,8 @@ is generated **only** from the retrieved passages and cites its sources inline.
 
 > **Runs in 60 seconds with zero API keys.** The project ships with an offline mode
 > (deterministic embeddings + an extractive answerer) so you can clone, run, and see the
-> full pipeline work immediately — then flip two env vars to switch to OpenAI embeddings
-> and Claude for real semantic retrieval and generation.
+> full pipeline work immediately — then add **one free [Gemini](https://aistudio.google.com/apikey)
+> key** to switch to real semantic retrieval and generation, at no cost.
 
 ## ✨ Features
 
@@ -38,9 +38,9 @@ is generated **only** from the retrieved passages and cites its sources inline.
 - **Grounded answers with citations** — the model answers only from retrieved context and
   marks every claim with `[n]` source markers.
 - **Token streaming** — answers stream to the UI over Server-Sent Events.
-- **Pluggable providers** — swap embeddings (OpenAI ↔ offline) and the LLM (Claude ↔
-  offline) behind clean interfaces; the vector store is equally swappable (Chroma /
-  pgvector / Pinecone).
+- **Pluggable providers** — swap embeddings (Gemini / OpenAI ↔ offline) and the LLM
+  (Gemini / Claude ↔ offline) behind clean interfaces; the vector store is equally
+  swappable (Chroma / pgvector / Pinecone).
 - **Full product UI ("Peit")** — a from-scratch, framework-free single-page app: animated
   marketing landing page, sign-up with **email verification codes** (+ **password reset**),
   Google/GitHub OAuth, and a dashboard with saved conversation history, **per-chat document
@@ -84,7 +84,7 @@ flowchart LR
         E2 --> R[Top-k cosine search]
         V --> R
         R --> PR[Build grounded prompt]
-        PR --> L[LLM: Claude]
+        PR --> L[LLM: Gemini]
         L --> A[Streamed answer + citations]
     end
 ```
@@ -127,23 +127,26 @@ auto-seeds the sample document so it's queryable immediately.
 > within a warm instance — perfect for a demo. For durable storage, run it as a container
 > or swap in a hosted vector DB behind the `VectorStore` interface.
 
-### Enable real models (recommended)
+### Enable real models — free with Gemini (recommended)
 
-Copy `.env.example` to `.env` and set:
+Gemini's free tier runs the whole pipeline at no cost, and **one key powers both the
+LLM and the embeddings**. Grab a free key at
+**[Google AI Studio](https://aistudio.google.com/apikey)**, copy `.env.example` to
+`.env`, and set:
 
 ```ini
-EMBEDDING_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-opus-4-8
+EMBEDDING_PROVIDER=gemini
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=...
 ```
 
-The LLM is the part that "talks": set **`LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`**
-to get real Claude-generated answers (leave them unset to run the offline `echo`
-answerer). The OpenAI embeddings above are optional — they improve retrieval, but
-`hash` mode works with no key.
+That's it — real semantic retrieval **and** grounded, cited generation, for free.
+`GEMINI_MODEL` defaults to `gemini-flash-latest` (always the current free Flash model).
+
+Prefer other providers? The interfaces are pluggable: set `LLM_PROVIDER=anthropic`
+(+ `ANTHROPIC_API_KEY`) for Claude, or `EMBEDDING_PROVIDER=openai` (+ `OPENAI_API_KEY`)
+for OpenAI embeddings — install the optional SDK first with `pip install anthropic`
+or `pip install openai`.
 
 > **On Vercel** (or any host), set these as **Environment Variables** in the project
 > settings instead of a `.env` file, then redeploy — env-var changes only take effect
@@ -151,18 +154,23 @@ answerer). The OpenAI embeddings above are optional — they improve retrieval, 
 
 ## ⚙️ Configuration
 
-| Variable             | Default              | Description                                            |
-| -------------------- | -------------------- | ------------------------------------------------------ |
-| `EMBEDDING_PROVIDER` | `hash`               | `hash` (offline) or `openai`                           |
-| `EMBEDDING_MODEL`    | `text-embedding-3-small` | OpenAI embedding model                             |
-| `OPENAI_API_KEY`     | —                    | Required when `EMBEDDING_PROVIDER=openai`               |
-| `LLM_PROVIDER`       | `echo`               | `echo` (offline) or `anthropic`                        |
-| `ANTHROPIC_MODEL`    | `claude-opus-4-8`    | Claude model for generation                            |
-| `ANTHROPIC_API_KEY`  | —                    | Required when `LLM_PROVIDER=anthropic`                  |
-| `CHUNK_SIZE`         | `900`                | Target characters per chunk                            |
-| `CHUNK_OVERLAP`      | `150`                | Overlap between adjacent chunks                         |
-| `TOP_K`              | `4`                  | Chunks retrieved per query                              |
-| `STORAGE_DIR`        | `storage`            | Where the vector index is persisted                    |
+| Variable                 | Default                | Description                                                   |
+| ------------------------ | ---------------------- | ------------------------------------------------------------ |
+| `EMBEDDING_PROVIDER`     | `hash`                 | `hash` (offline), `gemini` (free), or `openai`               |
+| `LLM_PROVIDER`           | `echo`                 | `echo` (offline), `gemini` (free), or `anthropic`            |
+| `GEMINI_API_KEY`         | —                      | One free key for the `gemini` LLM **and** embeddings ([get one](https://aistudio.google.com/apikey)) |
+| `GEMINI_MODEL`           | `gemini-flash-latest`  | Gemini model for generation                                  |
+| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Gemini embedding model                                       |
+| `GEMINI_EMBEDDING_DIM`   | `768`                  | Gemini embedding output dimensionality                       |
+| `GEMINI_THINKING_BUDGET` | `0`                    | `0` disables thinking (fast/cheap); `-1` lets the model decide |
+| `ANTHROPIC_API_KEY`      | —                      | Required when `LLM_PROVIDER=anthropic`                        |
+| `ANTHROPIC_MODEL`        | `claude-opus-4-8`      | Claude model for generation                                  |
+| `OPENAI_API_KEY`         | —                      | Required when `EMBEDDING_PROVIDER=openai`                     |
+| `EMBEDDING_MODEL`        | `text-embedding-3-small` | OpenAI embedding model                                     |
+| `CHUNK_SIZE`             | `900`                  | Target characters per chunk                                  |
+| `CHUNK_OVERLAP`          | `150`                  | Overlap between adjacent chunks                              |
+| `TOP_K`                  | `4`                    | Chunks retrieved per query                                   |
+| `STORAGE_DIR`            | `storage`              | Where the vector index is persisted                          |
 
 ## 🔐 Real Google / GitHub OAuth (optional)
 
@@ -266,10 +274,10 @@ rag-knowledge-assistant/
 │   ├── api/routes.py      # HTTP endpoints
 │   └── core/
 │       ├── chunking.py    # Overlapping text splitter
-│       ├── embeddings.py  # OpenAI + offline hashing providers
+│       ├── embeddings.py  # Gemini + OpenAI + offline hashing providers
 │       ├── vectorstore.py # From-scratch NumPy cosine index (persisted)
 │       ├── ingest.py      # PDF / text extraction
-│       ├── llm.py         # Claude + offline echo providers
+│       ├── llm.py         # Gemini + Claude + offline echo providers
 │       └── service.py     # RAG orchestration (retrieve → prompt → generate)
 ├── frontend/              # Dependency-free chat UI (HTML/CSS/JS)
 ├── tests/                 # Offline pytest suite
@@ -286,7 +294,7 @@ rag-knowledge-assistant/
   footprint tiny. It sits behind a `VectorStore` interface, so moving to Chroma, pgvector,
   or Pinecone is a one-class change.
 - **Why offline providers?** So the repo is genuinely runnable and CI-testable without
-  secrets. The provider abstraction is the same one used for the real OpenAI/Claude
+  secrets. The provider abstraction is the same one used for the real Gemini/OpenAI/Claude
   implementations — nothing is faked at the seams.
 - **Grounding & citations.** Retrieved chunks are numbered in the prompt and the model is
   instructed to answer only from them and cite with `[n]`; the API returns the matching

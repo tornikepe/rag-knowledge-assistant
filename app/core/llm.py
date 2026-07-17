@@ -1,8 +1,10 @@
 """Answer-generation LLM providers.
 
 The RAG pipeline retrieves context; the LLM turns that context into a grounded,
-citation-bearing answer. Two providers implement one interface:
+citation-bearing answer. Three providers implement one interface:
 
+* ``GeminiLLM`` — Google Gemini via the google-genai SDK, streamed. The recommended
+  provider: Gemini's free tier runs real answers at no cost.
 * ``AnthropicLLM`` — Claude via the official Anthropic SDK, with token streaming.
 * ``EchoLLM`` — a deterministic offline stand-in that composes an answer from the
   retrieved context. It needs no API key, so the app (and its tests) run anywhere.
@@ -49,8 +51,8 @@ class EchoLLM(LLMProvider):
     """Offline provider: a lightweight extractive answerer built from the retrieved
     context. It reads the numbered passages, picks the sentences most relevant to the
     question, and stitches them into a natural, cited answer — no API key required, so
-    the app and its tests run anywhere. Set ``LLM_PROVIDER=anthropic`` for real Claude
-    generation.
+    the app and its tests run anywhere. Set ``LLM_PROVIDER=gemini`` (free) or
+    ``anthropic`` for real generation.
     """
 
     model = "echo"
@@ -79,11 +81,64 @@ class EchoLLM(LLMProvider):
             yield closing
 
 
+class GeminiLLM(LLMProvider):
+    """Google Gemini via the google-genai SDK, streamed.
+
+    The recommended real provider: Gemini's free tier makes grounded answers cost
+    nothing to run, and one ``GEMINI_API_KEY`` also powers ``GeminiEmbeddings``.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-flash-latest",
+        max_tokens: int = 1024,
+        thinking_budget: int | None = 0,
+    ) -> None:
+        from google import genai  # lazy import so other modes need no google-genai dep
+        from google.genai import types
+
+        self._types = types
+        self._client = genai.Client(api_key=api_key)
+        self.model = model
+        self.max_tokens = max_tokens
+        self.thinking_budget = thinking_budget
+
+    def stream(self, system: str, user: str) -> Iterator[str]:
+        types = self._types
+        config_kwargs: dict = {
+            "system_instruction": system,
+            "max_output_tokens": self.max_tokens,
+        }
+        # Answering from retrieved passages needs no chain-of-thought; disabling
+        # "thinking" on flash models keeps replies fast and stops reasoning tokens
+        # from consuming the max_output_tokens budget (which can otherwise return an
+        # empty answer). Guarded so older SDKs without ThinkingConfig still work.
+        thinking_config = getattr(types, "ThinkingConfig", None)
+        if thinking_config is not None and self.thinking_budget is not None:
+            config_kwargs["thinking_config"] = thinking_config(
+                thinking_budget=self.thinking_budget
+            )
+        config = types.GenerateContentConfig(**config_kwargs)
+        for chunk in self._client.models.generate_content_stream(
+            model=self.model, contents=user, config=config
+        ):
+            if chunk.text:
+                yield chunk.text
+
+
 class AnthropicLLM(LLMProvider):
     """Claude via the Anthropic Messages API, streamed."""
 
     def __init__(self, api_key: str, model: str = "claude-opus-4-8", max_tokens: int = 1024) -> None:
-        import anthropic  # lazy import so `echo` mode needs no anthropic dependency
+        try:
+            import anthropic  # lazy import: only needed when LLM_PROVIDER=anthropic
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            raise ModuleNotFoundError(
+                "LLM_PROVIDER=anthropic needs the Anthropic SDK. Install it with "
+                "`pip install anthropic`. The default free provider is Gemini "
+                "(LLM_PROVIDER=gemini), which needs no extra install."
+            ) from exc
 
         self._client = anthropic.Anthropic(api_key=api_key)
         self.model = model
@@ -104,11 +159,24 @@ def build_llm_provider(settings: Settings) -> LLMProvider:
 
     A misconfigured provider must never take the whole app down: this runs at
     import time on serverless (see ``app.main``), so raising here would 500 every
-    route — including the landing page and offline ``echo`` mode. When Anthropic is
-    requested but no key is present, we log a warning and fall back to ``EchoLLM``
-    so the site stays up; set ``ANTHROPIC_API_KEY`` to restore Claude answers.
+    route — including the landing page and offline ``echo`` mode. When a cloud
+    provider is requested but its key is missing, we log a warning and fall back to
+    ``EchoLLM`` so the site stays up; set the provider's key to restore real answers.
     """
     provider = settings.llm_provider.lower()
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            logger.warning(
+                "LLM_PROVIDER=gemini but GEMINI_API_KEY is not set — falling back to "
+                "offline 'echo' answers. Set GEMINI_API_KEY to enable Gemini."
+            )
+            return EchoLLM()
+        return GeminiLLM(
+            settings.gemini_api_key,
+            settings.gemini_model,
+            settings.max_tokens,
+            settings.gemini_thinking_budget,
+        )
     if provider == "anthropic":
         if not settings.anthropic_api_key:
             logger.warning(

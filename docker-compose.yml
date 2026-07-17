@@ -4,11 +4,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Defaults run offline. Uncomment + set keys for real models:
-      # EMBEDDING_PROVIDER: openai
-      # OPENAI_API_KEY: ${OPENAI_API_KEY}
-      # LLM_PROVIDER: anthropic
-      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # Defaults run offline. Uncomment for real, free answers on Gemini
+      # (one key powers both the LLM and embeddings):
+      # EMBEDDING_PROVIDER: gemini
+      # LLM_PROVIDER: gemini
+      # GEMINI_API_KEY: ${GEMINI_API_KEY}
       EMBEDDING_PROVIDER: hash
       LLM_PROVIDER: echo
     volumes:

@@ -2,10 +2,14 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
-pydantic==2.10.4
+pydantic==2.13.4          # >=2.12.5 required by google-genai
 pydantic-settings==2.7.1
 numpy==2.2.1
-anthropic==0.42.0
-openai==1.59.6
+google-genai==2.12.1
 pypdf==5.1.0
 httpx==0.28.1
+
+# Optional alternative providers (the app defaults to free Gemini). Uncomment to
+# use LLM_PROVIDER=anthropic or EMBEDDING_PROVIDER=openai:
+# anthropic==0.42.0
+# openai==1.59.6

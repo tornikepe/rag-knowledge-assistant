@@ -4,7 +4,9 @@ Embeddings turn text into vectors so we can measure semantic similarity. The pro
 is pluggable behind a small interface, which keeps the rest of the app agnostic to
 *how* vectors are produced:
 
-* ``OpenAIEmbeddings`` — ``text-embedding-3-small``; the production default.
+* ``GeminiEmbeddings`` — Google Gemini (``gemini-embedding-001``); the recommended
+  provider for real retrieval, and free on Gemini's free tier.
+* ``OpenAIEmbeddings`` — ``text-embedding-3-small``.
 * ``HashingEmbeddings`` — a deterministic, dependency-free, offline embedder used for
   demos and CI. It is a hashing bag-of-words model: not semantically strong, but it
   needs no API key and makes the whole pipeline runnable and testable anywhere.
@@ -67,6 +69,57 @@ class HashingEmbeddings(EmbeddingProvider):
         return _l2_normalize(np.vstack([self._embed_one(t) for t in texts]))
 
 
+class GeminiEmbeddings(EmbeddingProvider):
+    """Google Gemini embeddings via the google-genai SDK (free-tier friendly).
+
+    Task-type aware: documents are embedded with ``RETRIEVAL_DOCUMENT`` and queries
+    with ``RETRIEVAL_QUERY``, which sharpens retrieval versus one symmetric embedding.
+    One ``GEMINI_API_KEY`` powers this and ``app.core.llm.GeminiLLM``.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-embedding-001",
+        dim: int = 768,
+        batch_size: int = 100,
+    ) -> None:
+        from google import genai  # lazy import so `hash` mode needs no google-genai dep
+        from google.genai import types
+
+        self._types = types
+        self._client = genai.Client(api_key=api_key)
+        self.model = model
+        self.dim = dim
+        self.batch_size = batch_size
+
+    def _embed(self, texts: list[str], task_type: str) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        vectors: list[list[float]] = []
+        # Gemini accepts batches; 100 stays within the embedding request limit.
+        for start in range(0, len(texts), self.batch_size):
+            batch = texts[start : start + self.batch_size]
+            resp = self._client.models.embed_content(
+                model=self.model,
+                contents=batch,
+                config=self._types.EmbedContentConfig(
+                    task_type=task_type,
+                    output_dimensionality=self.dim,
+                ),
+            )
+            vectors.extend(e.values for e in resp.embeddings)
+        # A truncated output dimension (dim < the model's native size) needs
+        # re-normalizing for cosine similarity — which is what _l2_normalize does.
+        return _l2_normalize(np.array(vectors, dtype=np.float32))
+
+    def embed_documents(self, texts: list[str]) -> np.ndarray:
+        return self._embed(texts, "RETRIEVAL_DOCUMENT")
+
+    def embed_query(self, text: str) -> np.ndarray:
+        return self._embed([text], "RETRIEVAL_QUERY")[0]
+
+
 class OpenAIEmbeddings(EmbeddingProvider):
     """OpenAI embeddings (``text-embedding-3-small`` by default)."""
 
@@ -77,7 +130,14 @@ class OpenAIEmbeddings(EmbeddingProvider):
     }
 
     def __init__(self, api_key: str, model: str = "text-embedding-3-small") -> None:
-        from openai import OpenAI  # imported lazily so `hash` mode needs no openai dep
+        try:
+            from openai import OpenAI  # lazy import: only needed for EMBEDDING_PROVIDER=openai
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            raise ModuleNotFoundError(
+                "EMBEDDING_PROVIDER=openai needs the OpenAI SDK. Install it with "
+                "`pip install openai`. The default free provider is Gemini "
+                "(EMBEDDING_PROVIDER=gemini), which needs no extra install."
+            ) from exc
 
         self._client = OpenAI(api_key=api_key)
         self.model = model
@@ -98,6 +158,17 @@ class OpenAIEmbeddings(EmbeddingProvider):
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
     """Factory: choose an embedding provider from settings."""
     provider = settings.embedding_provider.lower()
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            raise ValueError(
+                "EMBEDDING_PROVIDER=gemini requires GEMINI_API_KEY. "
+                "Set it in .env, or use EMBEDDING_PROVIDER=hash for offline mode."
+            )
+        return GeminiEmbeddings(
+            settings.gemini_api_key,
+            settings.gemini_embedding_model,
+            settings.gemini_embedding_dim,
+        )
     if provider == "openai":
         if not settings.openai_api_key:
             raise ValueError(
